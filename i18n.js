@@ -3,8 +3,12 @@
     defaultLanguage: "zh",
     copy: {
       zh: {
-        appSubtitle: "霓虹蛇阵已点亮  |  1-4 模式  |  D 每日  |  A 档案",
+        appSubtitle: "霓虹蛇阵已点亮  |  经典巡航  |  每日挑战",
         languageButton: "EN",
+        settingsButton: "设置",
+        settingsLanguage: "语言",
+        moreModesCollapsed: "更多模式",
+        moreModesExpanded: "收起模式",
         score: "分数",
         modeShortcut: "M 模式",
         resetShortcut: "R 重开",
@@ -117,8 +121,12 @@
         },
       },
       en: {
-        appSubtitle: "NEON SNAKE ONLINE  |  1-4 MODES  |  D DAILY  |  A ARCHIVE",
+        appSubtitle: "NEON SNAKE  |  CLASSIC  |  DAILY",
         languageButton: "中文",
+        settingsButton: "SETTINGS",
+        settingsLanguage: "LANG",
+        moreModesCollapsed: "MORE MODES",
+        moreModesExpanded: "HIDE MODES",
         score: "SCORE",
         modeShortcut: "M MODE",
         resetShortcut: "R RESET",

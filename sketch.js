@@ -31,6 +31,9 @@ let screen = "select";
 let activeModeId = "classic";
 let modeCards = [];
 let languageButton = null;
+let settingsButton = null;
+let settingsLanguageButton = null;
+let moreModesButton = null;
 let progressionArchiveButton = null;
 let dailyChallengeCard = null;
 let archiveBackButton = null;
@@ -56,6 +59,8 @@ let todayChallenge = null;
 let currentRun = null;
 let activeDailyChallenge = null;
 let progressionToasts = [];
+let moreModesExpanded = false;
+let settingsExpanded = false;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -443,6 +448,9 @@ function getFittedTextSize(label, maxWidth, preferredSize, minSize) {
 function drawModeSelect(now) {
   modeCards = [];
   languageButton = null;
+  settingsButton = null;
+  settingsLanguageButton = null;
+  moreModesButton = null;
   progressionArchiveButton = null;
   dailyChallengeCard = null;
   archiveBackButton = null;
@@ -453,6 +461,7 @@ function drawModeSelect(now) {
   const compact = width < 760 || shouldUseTouchLayout();
   const titleY = compact ? 12 : clamp(height * 0.034, 14, 30);
   const titleSize = compact ? clamp(width * 0.09, 32, 42) : clamp(width * 0.052, 58, 92);
+  const copy = getCopy();
 
   drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
     baseline: TOP,
@@ -460,76 +469,151 @@ function drawModeSelect(now) {
     glowScale: 0.46,
   });
 
-  drawReadableText(getCopy().appSubtitle, width / 2, titleY + titleSize + 22, {
+  drawReadableText(copy.appSubtitle, width / 2, titleY + titleSize + 22, {
     size: compact ? clamp(width * 0.032, 12, 15) : clamp(width * 0.016, 18, 26),
     style: BOLD,
     primary: PALETTE.limeText,
     glow: PALETTE.cyan,
   });
 
-  drawLanguageButton();
-
   const columns = compact ? 1 : 2;
   const gap = compact ? 12 : 18;
   const margin = compact ? 20 : 34;
-  const cardW = Math.min(380, (width - margin * 2 - gap * (columns - 1)) / columns);
-  const cardH = compact ? 92 : 116;
-  const rows = Math.ceil(SnakeLogic.MODE_SEQUENCE.length / columns);
-  const totalW = cardW * columns + gap * (columns - 1);
-  const totalH = cardH * rows + gap * (rows - 1);
+  const totalW = Math.min(compact ? 440 : 820, width - margin * 2);
+  const cardW = compact ? totalW : (totalW - gap) / columns;
+  const cardH = compact ? 82 : 104;
   const startX = (width - totalW) / 2;
-  const startY = Math.max(titleY + titleSize + 76, Math.min(height - totalH - 24, height * 0.29));
+  const drawerH = compact ? 48 : 56;
+  const archiveH = compact ? 62 : 74;
+  const settingsRowH = compact ? 44 : 50;
+  const extraModes = SnakeLogic.MODE_SEQUENCE.filter((modeId) => modeId !== "classic");
+  const extraRows = Math.ceil(extraModes.length / columns);
+  const extraModesHeight = moreModesExpanded ? extraRows * cardH + Math.max(0, extraRows - 1) * gap + gap : 0;
+  const plannedListHeight =
+    (compact ? cardH * 2 + gap : cardH) +
+    gap +
+    drawerH +
+    gap +
+    extraModesHeight +
+    archiveH +
+    gap +
+    drawerH +
+    (settingsExpanded ? gap + settingsRowH : 0);
+  const minStartY = titleY + titleSize + (compact ? 58 : 76);
+  const preferredStartY = Math.max(minStartY, Math.min(height * (compact ? 0.2 : 0.28), height - 300));
+  const fitStartY = height - plannedListHeight - (compact ? 16 : 24);
+  let cursorY = compact ? Math.max(minStartY, Math.min(preferredStartY, fitStartY)) : preferredStartY;
 
-  SnakeLogic.MODE_SEQUENCE.forEach((modeId, index) => {
-    const config = SnakeLogic.getModeConfig(modeId);
-    const modeCopy = getModeCopy(modeId);
-    const col = index % columns;
-    const row = Math.floor(index / columns);
-    const x = startX + col * (cardW + gap);
-    const y = startY + row * (cardH + gap);
-    const selected = modeId === activeModeId;
-    const pulse = selected ? 0.45 + sin(now * 0.008) * 0.2 : 0;
+  drawModeCard("classic", startX, cursorY, cardW, cardH, compact, now);
 
-    modeCards.push({ modeId, x, y, w: cardW, h: cardH });
+  const summary = progressionSummary || refreshProgressionSummary();
+  const challenge = todayChallenge || ensureDailyChallenge();
+  const progressionCopy = copy.progression;
+  const dailyX = compact ? startX : startX + cardW + gap;
+  const dailyY = compact ? cursorY + cardH + gap : cursorY;
+  dailyChallengeCard = { x: dailyX, y: dailyY, w: cardW, h: cardH };
+  drawDailyChallengeSelectCard(dailyChallengeCard, challenge, summary, progressionCopy, now);
 
-    push();
-    drawingContext.shadowBlur = selected ? 22 : 12;
-    drawingContext.shadowColor = selected ? PALETTE.acid : PALETTE.cyan;
-    stroke(selected ? PALETTE.acid : PALETTE.cyan);
-    strokeWeight(selected ? 2.5 : 1.5);
-    fill(6, 11, 22, selected ? 230 : 205);
-    rect(x, y, cardW, cardH, 6);
+  cursorY += compact ? (cardH + gap) * 2 : cardH + gap;
 
-    noStroke();
-    fill(255, 43, 214, 52 + pulse * 70);
-    rect(x, y, 5, cardH);
+  moreModesButton = { x: startX, y: cursorY, w: totalW, h: drawerH };
+  drawMoreModesDrawerButton(moreModesButton, copy, now);
+  cursorY += drawerH + gap;
 
-    textAlign(LEFT, TOP);
-    textStyle(BOLD);
-    fill(PALETTE.pink);
-    textSize(13);
-    text(`0${config.number}`, x + 18, y + 16);
+  if (moreModesExpanded) {
+    extraModes.forEach((modeId, index) => {
+      const col = compact ? 0 : index % columns;
+      const row = compact ? index : Math.floor(index / columns);
+      drawModeCard(modeId, startX + col * (cardW + gap), cursorY + row * (cardH + gap), cardW, cardH, compact, now);
+    });
+    cursorY += extraRows * cardH + Math.max(0, extraRows - 1) * gap + gap;
+  }
 
-    fill(PALETTE.white);
-    textSize(compact ? 22 : 28);
-    text(modeCopy.title, x + 58, y + 13);
+  progressionArchiveButton = { x: startX, y: cursorY, w: totalW, h: archiveH };
+  drawProgressionSummaryCard(progressionArchiveButton, summary, progressionCopy);
+  cursorY += archiveH + gap;
 
-    textStyle(NORMAL);
-    fill(PALETTE.acid);
-    textSize(compact ? 13 : 16);
-    text(modeCopy.tagline, x + 18, y + (compact ? 50 : 60), cardW - 36, 42);
+  settingsButton = { x: startX, y: cursorY, w: totalW, h: drawerH };
+  drawSettingsDrawerButton(settingsButton, copy, now);
+  cursorY += drawerH + gap;
 
-    fill(PALETTE.cyan);
-    textSize(compact ? 12 : 13);
-    text(getModeHint(modeId), x + 18, y + cardH - 27, cardW - 36, 18);
-    pop();
-  });
-
-  drawProgressionSelectPanel(startY + totalH + 18, now);
+  if (settingsExpanded) {
+    settingsLanguageButton = { x: startX, y: cursorY, w: totalW, h: settingsRowH };
+    drawSettingsPanel(settingsLanguageButton, copy, compact);
+  }
 }
 
 function getModeHint(modeId) {
   return getModeCopy(modeId).hint;
+}
+
+function drawModeCard(modeId, x, y, cardW, cardH, compact, now) {
+  const config = SnakeLogic.getModeConfig(modeId);
+  const modeCopy = getModeCopy(modeId);
+  const selected = modeId === activeModeId;
+  const pulse = selected ? 0.45 + sin(now * 0.008) * 0.2 : 0;
+
+  modeCards.push({ modeId, x, y, w: cardW, h: cardH });
+
+  push();
+  drawingContext.shadowBlur = selected ? 22 : 12;
+  drawingContext.shadowColor = selected ? PALETTE.acid : PALETTE.cyan;
+  stroke(selected ? PALETTE.acid : PALETTE.cyan);
+  strokeWeight(selected ? 2.5 : 1.5);
+  fill(6, 11, 22, selected ? 230 : 205);
+  rect(x, y, cardW, cardH, 6);
+
+  noStroke();
+  fill(255, 43, 214, 52 + pulse * 70);
+  rect(x, y, 5, cardH);
+
+  textAlign(LEFT, TOP);
+  textStyle(BOLD);
+  fill(PALETTE.pink);
+  textSize(13);
+  text(`0${config.number}`, x + 18, y + 14);
+
+  fill(PALETTE.white);
+  textSize(compact ? 21 : 26);
+  text(modeCopy.title, x + 58, y + 11);
+
+  textStyle(NORMAL);
+  fill(PALETTE.acid);
+  textSize(compact ? 12 : 15);
+  text(modeCopy.tagline, x + 18, y + (compact ? 45 : 54), cardW - 36, 34);
+
+  fill(PALETTE.cyan);
+  textSize(compact ? 11 : 12);
+  text(getModeHint(modeId), x + 18, y + cardH - 24, cardW - 36, 18);
+  pop();
+}
+
+function drawMoreModesDrawerButton(bounds, copy, now) {
+  const label = moreModesExpanded ? copy.moreModesExpanded : copy.moreModesCollapsed;
+  const arrow = moreModesExpanded ? "▲" : "▼";
+
+  push();
+  drawingContext.shadowBlur = 14;
+  drawingContext.shadowColor = moreModesExpanded ? PALETTE.acid : PALETTE.cyan;
+  stroke(moreModesExpanded ? PALETTE.acid : PALETTE.cyan);
+  strokeWeight(1.6);
+  fill(6, 11, 22, 218);
+  rect(bounds.x, bounds.y, bounds.w, bounds.h, 6);
+
+  noStroke();
+  fill(PALETTE.pink);
+  rect(bounds.x, bounds.y, 5, bounds.h);
+  fill(PALETTE.white);
+  textAlign(LEFT, CENTER);
+  textStyle(BOLD);
+  textSize(bounds.h < 52 ? 17 : 20);
+  text(label, bounds.x + 18, bounds.y + bounds.h / 2);
+
+  fill(PALETTE.acid);
+  textAlign(RIGHT, CENTER);
+  textSize(18 + sin(now * 0.006) * 1.5);
+  text(arrow, bounds.x + bounds.w - 18, bounds.y + bounds.h / 2);
+  pop();
 }
 
 function drawProgressionSelectPanel(preferredY, now) {
@@ -736,6 +820,58 @@ function formatDailyTarget(challenge) {
   return formatCopy(template, { target: challenge.target });
 }
 
+function drawSettingsDrawerButton(bounds, copy, now) {
+  const arrow = settingsExpanded ? "▲" : "▼";
+  push();
+  drawingContext.shadowBlur = 14;
+  drawingContext.shadowColor = settingsExpanded ? PALETTE.acid : PALETTE.cyan;
+  stroke(settingsExpanded ? PALETTE.acid : PALETTE.cyan);
+  strokeWeight(1.6);
+  fill(6, 11, 22, 218);
+  rect(bounds.x, bounds.y, bounds.w, bounds.h, 6);
+
+  noStroke();
+  fill(PALETTE.pink);
+  rect(bounds.x, bounds.y, 5, bounds.h);
+  fill(PALETTE.white);
+  textAlign(LEFT, CENTER);
+  textStyle(BOLD);
+  textSize(bounds.h < 52 ? 17 : 20);
+  text(copy.settingsButton, bounds.x + 18, bounds.y + bounds.h / 2);
+
+  fill(PALETTE.acid);
+  textAlign(RIGHT, CENTER);
+  textSize(18 + sin(now * 0.006) * 1.5);
+  text(arrow, bounds.x + bounds.w - 18, bounds.y + bounds.h / 2);
+  pop();
+}
+
+function drawSettingsPanel(bounds, copy, compact) {
+  push();
+  drawingContext.shadowBlur = 12;
+  drawingContext.shadowColor = PALETTE.pink;
+  stroke(PALETTE.pink);
+  strokeWeight(1.4);
+  fill(6, 11, 22, 226);
+  rect(bounds.x, bounds.y, bounds.w, bounds.h, 6);
+
+  noStroke();
+  fill(PALETTE.cyan);
+  rect(bounds.x, bounds.y, 5, bounds.h);
+
+  fill(PALETTE.white);
+  textAlign(LEFT, CENTER);
+  textStyle(BOLD);
+  textSize(compact ? 15 : 17);
+  text(copy.settingsLanguage, bounds.x + 18, bounds.y + bounds.h / 2);
+
+  fill(PALETTE.acid);
+  textAlign(RIGHT, CENTER);
+  textSize(compact ? 13 : 15);
+  text(copy.languageButton, bounds.x + bounds.w - 18, bounds.y + bounds.h / 2);
+  pop();
+}
+
 function drawLanguageButton() {
   const compact = width < 640;
   const label = getCopy().languageButton;
@@ -817,15 +953,16 @@ function drawHeader(now) {
 
 function drawMobileModeButton(copy, bounds) {
   const settings = bounds || {};
-  const buttonW = settings.w || 66;
-  const buttonH = settings.h || 30;
-  const x = settings.x === undefined ? 14 : settings.x;
-  const y = settings.y === undefined ? 12 : settings.y;
+  const buttonW = Math.round(settings.w || 66);
+  const buttonH = Math.round(settings.h || 30);
+  const x = Math.round(settings.x === undefined ? 14 : settings.x);
+  const y = Math.round(settings.y === undefined ? 12 : settings.y);
   const label = getMobileModeButtonLabel(copy);
 
   mobileModeButton = { x, y, w: buttonW, h: buttonH };
 
   push();
+  rectMode(CORNER);
   drawingContext.shadowBlur = 12;
   drawingContext.shadowColor = PALETTE.cyan;
   stroke(PALETTE.cyan);
@@ -836,8 +973,8 @@ function drawMobileModeButton(copy, bounds) {
   fill(PALETTE.acid);
   textAlign(CENTER, CENTER);
   textStyle(BOLD);
-  textSize(12);
-  text(label, x + buttonW / 2, y + buttonH / 2 + 0.5);
+  textSize(clamp(buttonH * 0.38, 12, 14));
+  text(label, x + buttonW / 2, y + buttonH / 2);
   pop();
 }
 
@@ -2150,8 +2287,20 @@ function handlePointer(x, y) {
   }
 
   if (screen === "select") {
-    if (languageButton && pointInRect(x, y, languageButton)) {
+    if (settingsButton && pointInRect(x, y, settingsButton)) {
+      settingsExpanded = !settingsExpanded;
+      playModeSound();
+      return false;
+    }
+
+    if (settingsLanguageButton && pointInRect(x, y, settingsLanguageButton)) {
       toggleLanguage();
+      return false;
+    }
+
+    if (moreModesButton && pointInRect(x, y, moreModesButton)) {
+      moreModesExpanded = !moreModesExpanded;
+      playModeSound();
       return false;
     }
 
