@@ -1,0 +1,143 @@
+(function attachWebSmallGameI18N(root) {
+  root.WebSmallGameI18N = {
+    defaultLanguage: "zh",
+    copy: {
+      zh: {
+        appSubtitle: "霓虹蛇阵已点亮  |  选择模式  |  按 1-4",
+        languageButton: "EN",
+        score: "分数",
+        modeShortcut: "M 模式",
+        resetShortcut: "R 重开",
+        languageShortcut: "L 语言",
+        soundOn: "音效开",
+        soundOff: "音效关",
+        fxFull: "特效完整",
+        fxReduced: "特效精简",
+        modes: {
+          classic: {
+            title: "经典模式",
+            tagline: "熟悉的节奏，考验每一次转弯。",
+            hint: "稳定速度 / 专注走位",
+          },
+          rush: {
+            title: "霓虹疾行",
+            tagline: "连吃越快，节奏越狠。",
+            hint: "连击加分 / 逐步加速",
+          },
+          maze: {
+            title: "电路迷宫",
+            tagline: "电墙封住去路，绕行才是本事。",
+            hint: "固定电墙 / 小心绕行",
+          },
+          portal: {
+            title: "传送漂移",
+            tagline: "传送门会突然改写你的路线。",
+            hint: "每 5 个食物重组传送门",
+          },
+        },
+        status: {
+          classic: "经典巡航",
+          rush: "速度 {speed}  连击 x{combo}",
+          maze: "电墙 {count}",
+          portal: "传送门重组 {current}/{total}",
+        },
+        impact: {
+          overdrive: "超载连击",
+          combo: "连击 x{combo}",
+          gatesShifted: "传送门重组",
+          portalDrift: "路线已改变",
+          modeOnline: "模式启动",
+          fxFull: "完整特效",
+          impactArmed: "冲击反馈已启动",
+        },
+        crash: {
+          electric: { label: "短路", reason: "电墙过载" },
+          body: { label: "撞到自己", reason: "蛇身回环" },
+          wall: { label: "系统崩溃", reason: "边界越界" },
+        },
+        overlay: {
+          paused: "已暂停",
+          won: "棋盘已清空",
+          gameover: "游戏结束",
+          progressSaved: "当前进度已保留",
+          finalScore: "最终分数 {score}",
+          resume: "空格 / P 继续",
+          restart: "R / 回车 / 点击重开",
+          backToModes: "M 返回模式选择",
+        },
+        scorePopup: {
+          points: "+{points}",
+          combo: "+{points} 连击 x{combo}",
+        },
+      },
+      en: {
+        appSubtitle: "NEON SNAKE ONLINE  |  CHOOSE A MODE  |  PRESS 1-4",
+        languageButton: "中文",
+        score: "SCORE",
+        modeShortcut: "M MODE",
+        resetShortcut: "R RESET",
+        languageShortcut: "L LANG",
+        soundOn: "SFX ON",
+        soundOff: "SFX OFF",
+        fxFull: "FX FULL",
+        fxReduced: "FX REDUCED",
+        modes: {
+          classic: {
+            title: "Classic",
+            tagline: "The familiar loop, tuned for clean turns.",
+            hint: "steady pace / pure routing",
+          },
+          rush: {
+            title: "Neon Rush",
+            tagline: "Chain pickups and the tempo bites back.",
+            hint: "combo scoring / rising speed",
+          },
+          maze: {
+            title: "Circuit Maze",
+            tagline: "Live wires block the lane. Thread the gap.",
+            hint: "fixed walls / careful routing",
+          },
+          portal: {
+            title: "Portal Drift",
+            tagline: "Twin gates keep rewriting your path.",
+            hint: "gates reshuffle every 5 food",
+          },
+        },
+        status: {
+          classic: "CLASSIC LOOP",
+          rush: "SPD {speed}  COMBO x{combo}",
+          maze: "WALLS {count}",
+          portal: "GATE SHIFT {current}/{total}",
+        },
+        impact: {
+          overdrive: "OVERDRIVE",
+          combo: "COMBO x{combo}",
+          gatesShifted: "GATES SHIFTED",
+          portalDrift: "PORTAL DRIFT",
+          modeOnline: "ONLINE",
+          fxFull: "FX FULL",
+          impactArmed: "IMPACT SYSTEM ARMED",
+        },
+        crash: {
+          electric: { label: "SHORT CIRCUIT", reason: "ELECTRIC WALL" },
+          body: { label: "SELF COLLISION", reason: "SNAKE BODY" },
+          wall: { label: "SYSTEM CRASH", reason: "OUT OF BOUNDS" },
+        },
+        overlay: {
+          paused: "PAUSED",
+          won: "GRID CLEARED",
+          gameover: "GAME OVER",
+          progressSaved: "Run state preserved",
+          finalScore: "FINAL SCORE {score}",
+          resume: "SPACE / P TO RESUME",
+          restart: "R / ENTER / TAP TO RESTART",
+          backToModes: "M BACK TO MODES",
+        },
+        scorePopup: {
+          points: "+{points}",
+          combo: "+{points} x{combo}",
+        },
+      },
+    },
+  };
+})(typeof globalThis !== "undefined" ? globalThis : window);
