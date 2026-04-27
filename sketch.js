@@ -107,7 +107,7 @@ function toggleLanguage() {
 function calculateLayout() {
   const compactControls = shouldShowTouchControls();
   const margin = compactControls ? 16 : 26;
-  const topReserve = compactControls ? 92 : 112;
+  const topReserve = compactControls ? 126 : 150;
   const bottomReserve = compactControls ? 152 : 36;
   const availableWidth = Math.max(220, width - margin * 2);
   const availableHeight = Math.max(220, height - topReserve - bottomReserve);
@@ -186,15 +186,30 @@ function drawNeonText(label, x, y, options) {
   const glowB = settings.glowB || PALETTE.cyan;
   const accent = settings.accent || PALETTE.acid;
   const primary = settings.primary || PALETTE.white;
+  const outlineWeight = settings.outlineWeight || Math.max(3, size * 0.16);
 
   push();
   textAlign(settings.align || CENTER, settings.baseline || CENTER);
   textStyle(settings.style || BOLD);
   textSize(size);
 
-  noStroke();
+  drawingContext.shadowBlur = size * 0.55;
+  drawingContext.shadowColor = glowB;
+  stroke(colorWithAlpha(glowB, 145 * alpha));
+  strokeWeight(outlineWeight);
+  fill(colorWithAlpha(PALETTE.ink, 55 * alpha));
+  text(label, x, y);
+
+  drawingContext.shadowBlur = size * 0.42;
+  drawingContext.shadowColor = glowA;
+  stroke(colorWithAlpha(glowA, 170 * alpha));
+  strokeWeight(outlineWeight * 0.66);
+  fill(colorWithAlpha(PALETTE.ink, 38 * alpha));
+  text(label, x, y);
+
   drawingContext.shadowBlur = size * 0.65;
   drawingContext.shadowColor = glowA;
+  noStroke();
   fill(colorWithAlpha(glowA, 120 * alpha));
   text(label, x - offset, y);
 
@@ -205,7 +220,7 @@ function drawNeonText(label, x, y, options) {
   drawingContext.shadowBlur = size * 0.34;
   drawingContext.shadowColor = accent;
   stroke(colorWithAlpha(accent, 230 * alpha));
-  strokeWeight(settings.strokeWeight || Math.max(1.5, size * 0.045));
+  strokeWeight(settings.strokeWeight || Math.max(2, size * 0.06));
   fill(colorWithAlpha(primary, 255 * alpha));
   text(label, x, y);
 
@@ -233,6 +248,7 @@ function drawNeonLogo(label, x, y, size, now, options) {
     accent: PALETTE.acid,
     primary: PALETTE.white,
     strokeWeight: settings.strokeWeight || Math.max(1.4, size * 0.04),
+    outlineWeight: settings.outlineWeight || Math.max(4, size * 0.15),
     offset: settings.offset || Math.max(1.5, size * 0.04),
   });
 
@@ -259,8 +275,8 @@ function drawModeSelect(now) {
   modeCards = [];
   languageButton = null;
   touchControls = [];
-  const titleY = clamp(height * 0.055, 18, 44);
-  const titleSize = clamp(width * 0.056, 30, 58);
+  const titleY = clamp(height * 0.048, 18, 38);
+  const titleSize = clamp(width * 0.068, 42, 84);
 
   drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
     baseline: TOP,
@@ -375,12 +391,13 @@ function drawHeader(now) {
   const pulse = getScorePulse(now);
   const copy = getCopy();
   const modeCopy = getModeCopy(game.modeId);
-  const titleSize = clamp(width * 0.038, 24, 36) + pulse * 3;
+  const titleSize = clamp(width * 0.045, 32, 54) + pulse * 4;
 
   push();
   drawNeonLogo("WebSmallGame", width / 2 + 2, compact ? 8 : 14, titleSize, now, {
     baseline: TOP,
-    maxWidth: width * 0.48,
+    maxWidth: width * 0.6,
+    outlineWeight: Math.max(4, titleSize * 0.17),
     offset: Math.max(1.2, titleSize * 0.032),
   });
 
@@ -391,13 +408,13 @@ function drawHeader(now) {
   textStyle(NORMAL);
 
   if (compact) {
-    textSize(12);
-    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, 48);
-    text(`${getModeStatus()}  |  ${getFeedbackStatus()}`, width / 2, 66);
+    textSize(15);
+    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, 66);
+    text(`${getModeStatus()}  |  ${getFeedbackStatus()}`, width / 2, 88);
   } else {
-    textSize(clamp(width * 0.016, 12, 16));
-    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2, 58);
-    text(`${getFeedbackStatus()}  |  ${copy.modeShortcut}  |  ${copy.resetShortcut}  |  ${copy.languageShortcut}`, width / 2, 78);
+    textSize(clamp(width * 0.018, 15, 22));
+    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2, 76);
+    text(`${getFeedbackStatus()}  |  ${copy.modeShortcut}  |  ${copy.resetShortcut}  |  ${copy.languageShortcut}`, width / 2, 102);
   }
 
   pop();
@@ -1260,6 +1277,7 @@ function drawStateOverlay() {
   const scoreLine = paused ? overlay.progressSaved : formatCopy(overlay.finalScore, { score: scoreLabel });
   const actionLine = paused ? overlay.resume : overlay.restart;
   const modeLine = overlay.backToModes;
+  const titleSize = clamp(board.w * 0.17, 46, 92);
 
   push();
   noStroke();
@@ -1268,17 +1286,19 @@ function drawStateOverlay() {
 
   const titleGlow = paused ? PALETTE.cyan : game.status === "won" ? PALETTE.acid : PALETTE.pink;
   const titleAccent = paused ? PALETTE.acid : game.status === "won" ? PALETTE.cyan : PALETTE.acid;
-  const titleY = board.y + board.h / 2 - 44;
+  const centerY = board.y + board.h / 2;
+  const titleY = centerY - titleSize * 0.82;
 
   drawNeonText(title, board.x + board.w / 2, titleY, {
-    size: clamp(board.w * 0.12, 30, 58),
+    size: titleSize,
     baseline: CENTER,
     glowA: titleGlow,
     glowB: PALETTE.cyan,
     accent: titleAccent,
     primary: PALETTE.white,
-    strokeWeight: Math.max(1.8, board.cell * 0.1),
-    offset: Math.max(1.5, board.cell * 0.08),
+    outlineWeight: Math.max(6, titleSize * 0.18),
+    strokeWeight: Math.max(2.4, titleSize * 0.065),
+    offset: Math.max(2, titleSize * 0.055),
   });
 
   drawingContext.shadowBlur = 10;
@@ -1286,11 +1306,11 @@ function drawStateOverlay() {
   textAlign(CENTER, CENTER);
   textStyle(NORMAL);
   fill(PALETTE.acid);
-  textSize(clamp(board.w * 0.038, 12, 18));
-  text(scoreLine, board.x + board.w / 2, board.y + board.h / 2 + 8);
-  textSize(clamp(board.w * 0.032, 11, 16));
-  text(actionLine, board.x + board.w / 2, board.y + board.h / 2 + 36);
-  text(modeLine, board.x + board.w / 2, board.y + board.h / 2 + 60);
+  textSize(clamp(board.w * 0.046, 18, 30));
+  text(scoreLine, board.x + board.w / 2, centerY + titleSize * 0.18);
+  textSize(clamp(board.w * 0.036, 15, 24));
+  text(actionLine, board.x + board.w / 2, centerY + titleSize * 0.56);
+  text(modeLine, board.x + board.w / 2, centerY + titleSize * 0.86);
   pop();
 }
 
