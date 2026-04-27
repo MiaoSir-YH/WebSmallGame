@@ -25,11 +25,17 @@ const DEFAULT_LANGUAGE = I18N.defaultLanguage;
 const COPY = I18N.copy;
 const Progression = globalThis.WebSmallGameProgression || null;
 const GAME_CATALOG = globalThis.WebSmallGameCatalog || [{ id: "snake", number: 1, enabled: true }];
+const MINI_GAMES = globalThis.WebSmallGameMiniGames || {};
 
 let game;
 let board;
 let screen = "home";
 let activeGameId = null;
+let activeMiniGame = null;
+let activeMiniGameState = null;
+let miniGameArea = null;
+let miniFeedbacks = [];
+let pressedKeys = Object.create(null);
 let gameCards = [];
 let activeModeId = "classic";
 let modeCards = [];
@@ -80,6 +86,32 @@ function setup() {
 function draw() {
   const now = millis();
 
+  if (screen === "miniPlaying" && activeMiniGame && activeMiniGameState) {
+    const env = getMiniGameEnv(now);
+    const previousStatus = activeMiniGameState.status;
+    const shouldStepMiniGame = activeMiniGameState.status !== "running" || now >= hitStopUntil;
+
+    if (shouldStepMiniGame) {
+      activeMiniGame.update(activeMiniGameState, env);
+    }
+
+    const events = drainMiniGameEvents(env, now);
+
+    if (
+      previousStatus === "running" &&
+      activeMiniGameState.status !== "running" &&
+      !events.some((event) => isMiniTerminalEvent(event))
+    ) {
+      gameOverFlashUntil = Math.max(gameOverFlashUntil, now + 220);
+      triggerMiniGameImpact({
+        type: activeMiniGameState.status === "won" ? "won" : "gameover",
+        x: 0.5,
+        y: 0.5,
+        intensity: 2,
+      }, env, now);
+    }
+  }
+
   if (
     screen === "playing" &&
     !paused &&
@@ -95,6 +127,10 @@ function draw() {
 
     if (previousStatus !== game.status && game.status === "gameover") {
       gameOverFlashUntil = Math.max(gameOverFlashUntil, now + 180);
+    }
+
+    if (previousStatus !== game.status && game.status === "won") {
+      triggerSnakeWinImpact(now);
     }
 
     if (game.status !== "running") {
@@ -250,6 +286,20 @@ function renderScene(now) {
 
   if (screen === "achievements") {
     drawProgressionArchive(now);
+    drawProgressionToasts(now);
+    return;
+  }
+
+  if (screen === "miniPlaying") {
+    const shake = getShakeOffset(now);
+
+    push();
+    translate(shake.x, shake.y);
+    drawMiniGameScene(now);
+    drawImpactEvents(now);
+    pop();
+
+    drawFlash(now);
     drawProgressionToasts(now);
     return;
   }
@@ -507,14 +557,15 @@ function drawGamePortal(now) {
   const gap = compact ? 12 : 18;
   const margin = compact ? 20 : 34;
   const columns = compact ? 1 : Math.min(2, Math.max(1, GAME_CATALOG.length));
+  const rows = Math.max(1, Math.ceil(GAME_CATALOG.length / columns));
   const totalW = Math.min(compact ? 440 : 860, width - margin * 2);
   const cardW = columns === 1 ? totalW : (totalW - gap * (columns - 1)) / columns;
-  const cardH = compact ? 136 : 176;
+  const startFloor = titleY + titleSize + (compact ? 68 : 98);
+  const preferredStart = height * (compact ? 0.2 : 0.28);
+  const startY = Math.max(startFloor, Math.min(preferredStart, height - (compact ? 112 : 176) - (compact ? 18 : 28)));
+  const availableCardHeight = height - startY - (compact ? 14 : 28) - gap * (rows - 1);
+  const cardH = clamp(availableCardHeight / rows, compact ? 96 : 150, compact ? 136 : 176);
   const startX = (width - totalW) / 2;
-  const startY = Math.max(
-    titleY + titleSize + (compact ? 72 : 100),
-    Math.min(height * (compact ? 0.24 : 0.3), height - cardH - (compact ? 18 : 28)),
-  );
 
   GAME_CATALOG.forEach((gameInfo, index) => {
     const col = index % columns;
@@ -544,35 +595,58 @@ function drawGamePortalCard(gameInfo, x, y, cardW, cardH, compact, now) {
   fill(255, 43, 214, enabled ? 70 + pulse * 70 : 40);
   rect(x, y, 6, cardH);
 
+  const tight = compact && cardH < 120;
+  const previewSize = tight ? 0 : 86;
+  const textRightReserve = !compact && previewSize ? 150 : 36;
+
   textAlign(LEFT, TOP);
   textStyle(BOLD);
-  textSize(compact ? 13 : 15);
+  textSize(compact ? 12 : 15);
   fill(PALETTE.pink);
-  text(String(gameInfo.number || 0).padStart(2, "0"), x + 18, y + 18);
+  text(String(gameInfo.number || 0).padStart(2, "0"), x + 18, y + (tight ? 12 : 18));
 
   fill(PALETTE.white);
-  textSize(compact ? 24 : 32);
-  text(gameCopy.title, x + 58, y + (compact ? 15 : 16), cardW - 76, 38);
+  textSize(tight ? 21 : compact ? 24 : 32);
+  text(gameCopy.title, x + 58, y + (tight ? 10 : compact ? 15 : 16), cardW - 76, tight ? 28 : 38);
 
   textStyle(NORMAL);
   fill(PALETTE.limeText);
-  textSize(compact ? 13 : 16);
-  text(gameCopy.tagline, x + 18, y + (compact ? 58 : 68), cardW - (compact ? 36 : 190), 44);
+  textSize(tight ? 12 : compact ? 13 : 16);
+  text(gameCopy.tagline, x + 18, y + (tight ? 44 : compact ? 58 : 68), cardW - textRightReserve, tight ? 30 : 44);
 
   fill(PALETTE.cyan);
-  textSize(compact ? 12 : 14);
-  text(gameCopy.meta, x + 18, y + cardH - (compact ? 44 : 52), cardW - 36, 22);
+  textSize(tight ? 11 : compact ? 12 : 14);
+  text(gameCopy.meta, x + 18, y + cardH - (tight ? 38 : compact ? 44 : 52), cardW - 36, 22);
 
   fill(PALETTE.acid);
   textStyle(BOLD);
-  textSize(compact ? 12 : 14);
-  text(gameCopy.hint, x + 18, y + cardH - (compact ? 24 : 28), cardW - 36, 20);
+  textSize(tight ? 11 : compact ? 12 : 14);
+  text(gameCopy.hint, x + 18, y + cardH - (tight ? 20 : compact ? 24 : 28), cardW - 36, 20);
 
   if (!compact) {
-    drawSnakePortalPreview(x + cardW - 132, y + 42, 86, now);
+    drawGamePortalPreview(gameInfo.id, x + cardW - 132, y + 42, 86, now);
   }
 
   pop();
+}
+
+function drawGamePortalPreview(gameId, x, y, size, now) {
+  if (gameId === "breakout") {
+    drawBreakoutPortalPreview(x, y, size, now);
+    return;
+  }
+
+  if (gameId === "dodge") {
+    drawDodgePortalPreview(x, y, size, now);
+    return;
+  }
+
+  if (gameId === "memory") {
+    drawMemoryPortalPreview(x, y, size, now);
+    return;
+  }
+
+  drawSnakePortalPreview(x, y, size, now);
 }
 
 function drawSnakePortalPreview(x, y, size, now) {
@@ -612,6 +686,119 @@ function drawSnakePortalPreview(x, y, size, now) {
   drawingContext.shadowColor = PALETTE.pink;
   fill(PALETTE.pink);
   rect(x + 4.4 * cell, y + 1.2 * cell, cell * 0.52, cell * 0.52, 3);
+  pop();
+}
+
+function drawBreakoutPortalPreview(x, y, size, now) {
+  push();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(colorWithAlpha(PALETTE.cyan, 130));
+  strokeWeight(1.2);
+  fill(5, 6, 12, 170);
+  rect(x, y, size, size, 6);
+
+  const brickW = size * 0.18;
+  const brickH = size * 0.08;
+  for (let row = 0; row < 4; row += 1) {
+    for (let col = 0; col < 4; col += 1) {
+      const tint = (row + col) % 3 === 0 ? PALETTE.acid : (row + col) % 3 === 1 ? PALETTE.cyan : PALETTE.pink;
+      drawingContext.shadowBlur = 9;
+      drawingContext.shadowColor = tint;
+      stroke(tint);
+      strokeWeight(1);
+      fill(colorWithAlpha(tint, 70));
+      rect(x + size * 0.09 + col * brickW * 1.22, y + size * 0.12 + row * brickH * 1.32, brickW, brickH, 2);
+    }
+  }
+
+  noStroke();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.acid;
+  fill(PALETTE.acid);
+  rect(x + size * 0.24, y + size * 0.78, size * 0.52, size * 0.07, 4);
+
+  drawingContext.shadowColor = PALETTE.pink;
+  fill(PALETTE.pink);
+  circle(x + size * (0.44 + sin(now * 0.006) * 0.12), y + size * 0.58, size * 0.12);
+  pop();
+}
+
+function drawDodgePortalPreview(x, y, size, now) {
+  push();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(colorWithAlpha(PALETTE.cyan, 130));
+  strokeWeight(1.2);
+  fill(5, 6, 12, 170);
+  rect(x, y, size, size, 6);
+
+  const hazards = [
+    { x: 0.22, y: 0.25, tint: PALETTE.pink },
+    { x: 0.72, y: 0.34, tint: PALETTE.cyan },
+    { x: 0.36, y: 0.68, tint: PALETTE.pink },
+  ];
+
+  hazards.forEach((hazard, index) => {
+    const hx = x + size * hazard.x + sin(now * 0.004 + index) * size * 0.04;
+    const hy = y + size * hazard.y + cos(now * 0.005 + index) * size * 0.04;
+    const hazardSize = size * 0.16;
+
+    drawingContext.shadowBlur = 14;
+    drawingContext.shadowColor = hazard.tint;
+    stroke(hazard.tint);
+    strokeWeight(1.5);
+    noFill();
+    circle(hx, hy, hazardSize);
+    line(hx - hazardSize * 0.32, hy, hx + hazardSize * 0.32, hy);
+    line(hx, hy - hazardSize * 0.32, hx, hy + hazardSize * 0.32);
+  });
+
+  noStroke();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.acid;
+  fill(PALETTE.acid);
+  rect(x + size * 0.72, y + size * 0.72, size * 0.14, size * 0.14, 3);
+
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.white);
+  strokeWeight(1.5);
+  fill(PALETTE.cyan);
+  rectMode(CENTER);
+  rect(x + size * 0.5, y + size * (0.54 + sin(now * 0.005) * 0.05), size * 0.18, size * 0.18, 4);
+  rectMode(CORNER);
+  pop();
+}
+
+function drawMemoryPortalPreview(x, y, size, now) {
+  push();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(colorWithAlpha(PALETTE.cyan, 130));
+  strokeWeight(1.2);
+  fill(5, 6, 12, 170);
+  rect(x, y, size, size, 6);
+
+  const gap = size * 0.035;
+  const cell = (size * 0.72 - gap * 3) / 4;
+  const startX = x + size * 0.14;
+  const startY = y + size * 0.14;
+  const active = Math.floor((now * 0.004) % 16);
+
+  for (let index = 0; index < 16; index += 1) {
+    const col = index % 4;
+    const row = Math.floor(index / 4);
+    const tint = index % 2 === 0 ? PALETTE.cyan : PALETTE.pink;
+    const lit = index === active;
+
+    drawingContext.shadowBlur = lit ? 18 : 8;
+    drawingContext.shadowColor = lit ? PALETTE.acid : tint;
+    stroke(lit ? PALETTE.acid : tint);
+    strokeWeight(lit ? 2 : 1);
+    fill(lit ? PALETTE.acid : colorWithAlpha(tint, 42));
+    rect(startX + col * (cell + gap), startY + row * (cell + gap), cell, cell, 3);
+  }
+
   pop();
 }
 
@@ -1153,6 +1340,513 @@ function drawHeader(now) {
   pop();
 }
 
+function getMiniGameCopy(gameId) {
+  const miniCopy = getCopy().miniGames || {};
+  return {
+    ...miniCopy,
+    ...(miniCopy[gameId] || {}),
+  };
+}
+
+function calculateMiniGameArea(compact) {
+  const margin = compact ? 16 : 30;
+  const topReserve = compact ? 132 : 188;
+  const bottomReserve = compact ? 24 : 36;
+  const maxWidth = Math.min(width - margin * 2, compact ? 680 : 900);
+  const maxHeight = Math.max(240, height - topReserve - bottomReserve);
+  const aspect = compact ? 0.9 : 1.45;
+  let areaW = maxWidth;
+  let areaH = areaW / aspect;
+
+  if (areaH > maxHeight) {
+    areaH = maxHeight;
+    areaW = areaH * aspect;
+  }
+
+  areaW = Math.max(240, Math.min(areaW, width - margin * 2));
+  areaH = Math.max(240, Math.min(areaH, maxHeight));
+
+  return {
+    x: Math.floor((width - areaW) / 2),
+    y: Math.floor(topReserve),
+    w: Math.floor(areaW),
+    h: Math.floor(areaH),
+  };
+}
+
+function getMiniGameEnv(now) {
+  const compact = width < 760 || shouldUseTouchLayout();
+  const area = calculateMiniGameArea(compact);
+  const copy = getMiniGameCopy(activeGameId);
+  miniGameArea = area;
+
+  return {
+    now,
+    area,
+    compact,
+    copy,
+    palette: PALETTE,
+    formatCopy,
+    isDown: isPressed,
+    drawReadableText,
+    drawNeonText,
+  };
+}
+
+function drawMiniGameScene(now) {
+  gameCards = [];
+  modeCards = [];
+  settingsButton = null;
+  settingsLanguageButton = null;
+  moreModesButton = null;
+  progressionArchiveButton = null;
+  dailyChallengeCard = null;
+  archiveBackButton = null;
+  mobileModeButton = null;
+  touchControls = [];
+
+  if (!activeMiniGame || !activeMiniGameState) {
+    returnToHome();
+    return;
+  }
+
+  const env = getMiniGameEnv(now);
+  const compact = env.compact;
+  const copy = getCopy();
+  const gameCopy = getGameCopy(activeGameId);
+  const miniCopy = env.copy;
+  const titleY = compact ? 10 : 18;
+  const titleSize = compact ? clamp(width * 0.083, 30, 42) : clamp(width * 0.045, 54, 78);
+  const scoreLabel = String(activeMiniGameState.score || 0).padStart(4, "0");
+  const status = miniCopy.status || gameCopy.tagline;
+
+  drawHomeBackButton(copy, compact);
+  drawLanguageButton({
+    x: width - (compact ? 58 : 74) - (compact ? 14 : 26),
+    y: compact ? 18 : 26,
+    w: compact ? 58 : 74,
+    h: compact ? 30 : 34,
+  });
+
+  drawNeonLogo(gameCopy.title, width / 2, titleY, titleSize, now, {
+    baseline: TOP,
+    maxWidth: compact ? width * 0.72 : width * 0.76,
+    outlineWeight: Math.max(8, titleSize * 0.22),
+    offset: Math.max(1, titleSize * 0.018),
+    glowScale: 0.38,
+  });
+
+  drawFittedReadableText(`${miniCopy.score} ${scoreLabel}  |  ${status}`, width / 2, titleY + titleSize + (compact ? 16 : 26), width * 0.9, {
+    size: compact ? 16 : 23,
+    minSize: compact ? 11 : 15,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
+
+  drawFittedReadableText(miniCopy.hint || gameCopy.meta, width / 2, titleY + titleSize + (compact ? 38 : 58), width * 0.9, {
+    size: compact ? 13 : 18,
+    minSize: compact ? 10 : 13,
+    primary: PALETTE.limeText,
+    glow: PALETTE.pink,
+  });
+
+  activeMiniGame.render(activeMiniGameState, env);
+  drawMiniFeedbacks(env, now);
+  drawMiniGameOverlay(activeMiniGameState, env, now);
+}
+
+function drawMiniGameOverlay(state, env, now) {
+  if (!state || state.status === "running") {
+    return;
+  }
+
+  const area = env.area;
+  const copy = env.copy;
+  const title = state.status === "won" ? copy.won : copy.gameover;
+  const titleSize = clamp(area.w * 0.14, env.compact ? 48 : 72, env.compact ? 78 : 112);
+  const centerY = area.y + area.h / 2;
+  const scoreLine = formatCopy(copy.finalScore, { score: String(state.score || 0).padStart(4, "0") });
+
+  push();
+  noStroke();
+  fill(5, 6, 12, 222);
+  rect(area.x, area.y, area.w, area.h, 8);
+
+  drawNeonText(title, area.x + area.w / 2, centerY - titleSize * 0.48, {
+    size: titleSize,
+    baseline: CENTER,
+    glowA: state.status === "won" ? PALETTE.acid : PALETTE.pink,
+    glowB: PALETTE.cyan,
+    accent: state.status === "won" ? PALETTE.cyan : PALETTE.acid,
+    primary: PALETTE.readable,
+    outlineWeight: Math.max(10, titleSize * 0.24),
+    strokeWeight: Math.max(3, titleSize * 0.056),
+    offset: Math.max(1.4, titleSize * 0.02),
+    glowScale: 0.36,
+  });
+
+  drawReadableText(scoreLine, area.x + area.w / 2, centerY + titleSize * 0.12, {
+    size: clamp(area.w * 0.044, env.compact ? 20 : 25, env.compact ? 28 : 36),
+    baseline: CENTER,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
+
+  drawReadableText(copy.restart, area.x + area.w / 2, centerY + titleSize * 0.48, {
+    size: clamp(area.w * 0.036, env.compact ? 17 : 22, env.compact ? 24 : 30),
+    baseline: CENTER,
+    primary: PALETTE.limeText,
+    glow: PALETTE.pink,
+  });
+
+  drawReadableText(copy.home, area.x + area.w / 2, centerY + titleSize * 0.78, {
+    size: clamp(area.w * 0.032, env.compact ? 15 : 20, env.compact ? 22 : 28),
+    baseline: CENTER,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
+  pop();
+}
+
+function drainMiniGameEvents(env, now) {
+  if (!activeMiniGameState || !Array.isArray(activeMiniGameState.events) || activeMiniGameState.events.length === 0) {
+    return [];
+  }
+
+  const events = activeMiniGameState.events.splice(0, activeMiniGameState.events.length);
+  events.forEach((event) => triggerMiniGameImpact(event, env, now));
+  return events;
+}
+
+function isMiniTerminalEvent(event) {
+  return ["won", "gameover", "crash", "wrong"].includes(event.type);
+}
+
+function triggerMiniGameStartFeedback() {
+  if (!activeMiniGame) {
+    return;
+  }
+
+  const now = millis();
+  const env = getMiniGameEnv(now);
+  triggerMiniGameImpact({
+    type: "start",
+    x: 0.5,
+    y: 0.5,
+    label: getGameCopy(activeGameId).title,
+    intensity: 1.55,
+  }, env, now);
+}
+
+function triggerMiniGameImpact(event, env, now) {
+  const config = getMiniFeedbackConfig(event, env);
+  const point = {
+    x: clamp(event.x === undefined ? 0.5 : event.x, 0, 1),
+    y: clamp(event.y === undefined ? 0.5 : event.y, 0, 1),
+  };
+  const feedback = {
+    type: event.type,
+    x: point.x,
+    y: point.y,
+    label: event.label || getMiniEventLabel(event, env.copy),
+    points: event.points || 0,
+    tint: config.tint,
+    accent: config.accent,
+    startedAt: now,
+    duration: config.duration,
+    intensity: config.intensity,
+    particles: buildMiniParticleBurst(config.particles, [config.tint, config.accent, PALETTE.white], config.intensity),
+  };
+
+  addMiniFeedback(feedback);
+  scorePulseUntil = Math.max(scorePulseUntil, now + (event.points ? 360 : 220));
+
+  if (config.banner) {
+    addImpactEvent({
+      type: "banner",
+      label: feedback.label,
+      sublabel: getMiniEventSublabel(event, env.copy),
+      tint: config.tint,
+      accent: config.accent,
+      duration: config.bannerDuration || 720,
+      fullScreen: true,
+    });
+  }
+
+  if (config.glitch) {
+    addImpactEvent({
+      type: "glitch",
+      intensity: config.intensity,
+      duration: config.glitchDuration || 360,
+      fullScreen: true,
+      slices: buildGlitchSlices(config.glitchSlices || 8),
+    });
+  }
+
+  if (config.flash) {
+    gameOverFlashUntil = Math.max(gameOverFlashUntil, now + config.flash);
+  }
+
+  if (config.shake) {
+    addShake(config.shake, config.shakeDuration || 160);
+  }
+
+  if (config.hitStop) {
+    addHitStop(config.hitStop);
+  }
+
+  playMiniImpactSound(event.type, config.intensity);
+  vibrate(config.vibrate);
+}
+
+function getMiniFeedbackConfig(event, env) {
+  const type = event.type;
+  const tint = getMiniEventTint(event, env);
+  const accent = type === "wrong" || type === "crash" || type === "gameover" || type === "miss" ? PALETTE.cyan : PALETTE.pink;
+  const base = {
+    tint,
+    accent,
+    duration: 460,
+    intensity: event.intensity || 1,
+    particles: 14,
+    vibrate: 10,
+  };
+
+  if (type === "start") {
+    return { ...base, accent: PALETTE.acid, duration: 680, particles: 28, shake: 5, shakeDuration: 150, hitStop: 28, banner: true, bannerDuration: 620, vibrate: 18 };
+  }
+
+  if (type === "wall") {
+    return { ...base, duration: 280, particles: 8, shake: 2, shakeDuration: 90, hitStop: 8, vibrate: 7 };
+  }
+
+  if (type === "paddle") {
+    return { ...base, accent: PALETTE.cyan, duration: 360, particles: 16, shake: 4, shakeDuration: 120, hitStop: 14, vibrate: [8, 14] };
+  }
+
+  if (type === "brick") {
+    return { ...base, accent: PALETTE.acid, duration: 560, particles: 26, shake: 7, shakeDuration: 150, hitStop: 24, vibrate: [10, 16] };
+  }
+
+  if (type === "miss") {
+    return { ...base, duration: 620, particles: 30, shake: 10, shakeDuration: 230, hitStop: 68, glitch: true, glitchDuration: 260, glitchSlices: 7, flash: 180, vibrate: [20, 24, 20] };
+  }
+
+  if (type === "chip") {
+    return { ...base, accent: PALETTE.cyan, duration: 560, particles: 24, shake: 5, shakeDuration: 130, hitStop: 18, vibrate: [10, 18, 10] };
+  }
+
+  if (type === "spawn") {
+    return { ...base, duration: 420, particles: 16, shake: 3, shakeDuration: 100, vibrate: 8 };
+  }
+
+  if (type === "show") {
+    return { ...base, accent: PALETTE.acid, duration: 320, particles: 8, vibrate: 5 };
+  }
+
+  if (type === "correct") {
+    return { ...base, accent: PALETTE.cyan, duration: 430, particles: 16, shake: 3, shakeDuration: 95, hitStop: 12, vibrate: 8 };
+  }
+
+  if (type === "round") {
+    return { ...base, accent: PALETTE.acid, duration: 680, particles: 34, shake: 6, shakeDuration: 150, hitStop: 26, vibrate: [12, 18, 12] };
+  }
+
+  if (type === "wrong" || type === "crash" || type === "gameover") {
+    return { ...base, duration: 820, particles: 44, shake: 17, shakeDuration: 390, hitStop: 120, glitch: true, glitchDuration: 480, glitchSlices: 13, banner: true, bannerDuration: 860, flash: 330, vibrate: [30, 25, 48] };
+  }
+
+  if (type === "won") {
+    return { ...base, accent: PALETTE.cyan, duration: 920, particles: 52, shake: 14, shakeDuration: 320, hitStop: 92, banner: true, bannerDuration: 900, flash: 260, vibrate: [18, 30, 18, 42] };
+  }
+
+  return base;
+}
+
+function getMiniEventTint(event, env) {
+  const palette = env.palette || PALETTE;
+
+  if (event.tint && palette[event.tint]) {
+    return palette[event.tint];
+  }
+
+  if (event.tint) {
+    return event.tint;
+  }
+
+  if (event.type === "won" || event.type === "chip" || event.type === "correct" || event.type === "round") {
+    return PALETTE.acid;
+  }
+
+  if (event.type === "wall" || event.type === "spawn" || event.type === "show") {
+    return PALETTE.cyan;
+  }
+
+  return PALETTE.pink;
+}
+
+function getMiniEventLabel(event, copy) {
+  const feedback = copy.feedback || {};
+
+  if (event.points) {
+    const points = formatCopy(feedback.points || "+{points}", { points: event.points });
+
+    if (event.type === "chip") {
+      return `${feedback.chip || "CHIP"} ${points}`;
+    }
+
+    if (event.type === "correct") {
+      return feedback.correct || "MATCH";
+    }
+
+    if (event.type === "round") {
+      return `${feedback.round || "NEXT ROUND"} ${points}`;
+    }
+
+    return points;
+  }
+
+  const labels = {
+    start: feedback.start || "ONLINE",
+    wall: feedback.bounce || "BOUNCE",
+    paddle: feedback.hit || "HIT",
+    brick: feedback.hit || "HIT",
+    miss: feedback.miss || "MISS",
+    chip: feedback.chip || "CHIP",
+    spawn: feedback.spawn || "SURGE",
+    show: feedback.show || "SIGNAL",
+    correct: feedback.correct || "MATCH",
+    round: feedback.round || "NEXT ROUND",
+    wrong: feedback.wrong || "ERROR",
+    crash: feedback.crash || "OVERLOAD",
+    gameover: copy.gameover || "GAME OVER",
+    won: copy.won || "CLEARED",
+  };
+
+  return labels[event.type] || event.type;
+}
+
+function getMiniEventSublabel(event, copy) {
+  const feedback = copy.feedback || {};
+
+  if (event.type === "won") {
+    return feedback.wonSub || formatCopy(copy.finalScore || "{score}", {
+      score: String((activeMiniGameState && activeMiniGameState.score) || 0).padStart(4, "0"),
+    });
+  }
+
+  if (event.type === "wrong" || event.type === "crash" || event.type === "gameover") {
+    return feedback.failSub || copy.restart || "";
+  }
+
+  if (event.type === "start") {
+    return feedback.startSub || copy.home || "";
+  }
+
+  return copy.score || "";
+}
+
+function addMiniFeedback(feedback) {
+  const normalized = {
+    ...feedback,
+    duration: feedbackMode === "reduced" ? Math.max(160, feedback.duration * 0.58) : feedback.duration,
+    intensity: feedbackMode === "reduced" ? feedback.intensity * 0.45 : feedback.intensity,
+    particles: feedbackMode === "reduced" ? feedback.particles.slice(0, 8) : feedback.particles,
+  };
+
+  miniFeedbacks.push(normalized);
+
+  if (miniFeedbacks.length > 36) {
+    miniFeedbacks.splice(0, miniFeedbacks.length - 36);
+  }
+}
+
+function drawMiniFeedbacks(env, now) {
+  miniFeedbacks = miniFeedbacks.filter((feedback) => now - feedback.startedAt <= feedback.duration);
+
+  if (miniFeedbacks.length === 0) {
+    return;
+  }
+
+  const area = env.area;
+  const baseSize = Math.min(area.w, area.h);
+
+  push();
+  miniFeedbacks.forEach((feedback) => {
+    const age = now - feedback.startedAt;
+    const progress = clamp(age / feedback.duration, 0, 1);
+    const alpha = 255 * (1 - progress);
+    const center = miniFeedbackPoint(area, feedback);
+    const ringSize = baseSize * (0.045 + progress * 0.24 * feedback.intensity);
+    const trail = Math.max(12, baseSize * 0.055) * feedback.intensity * (1 - progress);
+
+    noFill();
+    drawingContext.shadowBlur = 24 * feedback.intensity;
+    drawingContext.shadowColor = feedback.tint;
+    stroke(colorWithAlpha(feedback.tint, alpha));
+    strokeWeight(2.6);
+    circle(center.x, center.y, ringSize);
+
+    stroke(colorWithAlpha(feedback.accent, alpha * 0.72));
+    strokeWeight(1.4);
+    circle(center.x, center.y, ringSize * 0.54);
+
+    if (feedback.type === "paddle" || feedback.type === "brick" || feedback.type === "chip") {
+      stroke(colorWithAlpha(feedback.accent, alpha * 0.6));
+      strokeWeight(3);
+      line(center.x - trail, center.y + trail * 0.18, center.x + trail, center.y - trail * 0.18);
+    }
+
+    drawMiniFeedbackParticles(feedback, center, progress, alpha, baseSize);
+
+    if (feedback.label) {
+      env.drawReadableText(feedback.label, center.x, center.y - ringSize * 0.58 - 14 * (1 - progress), {
+        size: clamp(baseSize * 0.038, env.compact ? 13 : 16, env.compact ? 20 : 26),
+        baseline: CENTER,
+        primary: feedback.points ? PALETTE.amber : PALETTE.limeText,
+        glow: feedback.tint,
+      });
+    }
+  });
+  pop();
+}
+
+function miniFeedbackPoint(area, feedback) {
+  return {
+    x: area.x + clamp(feedback.x, 0, 1) * area.w,
+    y: area.y + clamp(feedback.y, 0, 1) * area.h,
+  };
+}
+
+function drawMiniFeedbackParticles(feedback, center, progress, alpha, baseSize) {
+  if (!feedback.particles || feedback.particles.length === 0) {
+    return;
+  }
+
+  noStroke();
+
+  feedback.particles.forEach((particle) => {
+    const distance = baseSize * particle.speed * progress * feedback.intensity;
+    const x = center.x + cos(particle.angle) * distance;
+    const y = center.y + sin(particle.angle) * distance + particle.drop * progress * progress;
+    const size = particle.size * (1 - progress * 0.42);
+
+    fill(colorWithAlpha(particle.color, alpha * particle.alpha));
+    rect(x - size / 2, y - size / 2, size, size, 2);
+  });
+}
+
+function buildMiniParticleBurst(count, colors, intensity) {
+  return Array.from({ length: count }, (_, index) => ({
+    angle: (Math.PI * 2 * index) / count + Math.random() * 0.52,
+    speed: 0.035 + Math.random() * 0.13 * intensity,
+    size: 2 + Math.random() * 5,
+    drop: (Math.random() - 0.35) * 36,
+    color: colors[index % colors.length],
+    alpha: 0.56 + Math.random() * 0.44,
+  }));
+}
+
 function drawMobileModeButton(copy, bounds) {
   const settings = bounds || {};
   const buttonW = Math.round(settings.w || 66);
@@ -1658,6 +2352,38 @@ function triggerModeStartFeedback(modeId, now) {
   vibrate(18);
 }
 
+function triggerSnakeWinImpact(now) {
+  const copy = getCopy();
+  const head = game.snake && game.snake[0] ? game.snake[0] : { x: Math.floor(GRID_COLS / 2), y: Math.floor(GRID_ROWS / 2) };
+  const scoreLabel = String(game.score || 0).padStart(4, "0");
+
+  addImpactEvent({
+    type: "shock",
+    cell: head,
+    tint: PALETTE.acid,
+    accent: PALETTE.cyan,
+    intensity: 2.25,
+    duration: 820,
+    particles: buildParticleBurst(head, 48, [PALETTE.acid, PALETTE.cyan, PALETTE.amber], 2.25),
+  });
+
+  addImpactEvent({
+    type: "banner",
+    label: copy.overlay.won,
+    sublabel: formatCopy(copy.overlay.finalScore, { score: scoreLabel }),
+    tint: PALETTE.acid,
+    accent: PALETTE.cyan,
+    duration: 940,
+    fullScreen: true,
+  });
+
+  addShake(14, 320);
+  addHitStop(92);
+  gameOverFlashUntil = Math.max(gameOverFlashUntil, now + 260);
+  playWinSound();
+  vibrate([18, 30, 18, 42]);
+}
+
 function addImpactEvent(event) {
   if (feedbackMode === "reduced" && event.fullScreen) {
     return;
@@ -2061,6 +2787,48 @@ function playModeSound() {
   playTone(440, 0.09, "square", 0.018, 660, 0.04);
 }
 
+function playWinSound() {
+  playTone(392, 0.09, "triangle", 0.036, 588);
+  playTone(784, 0.12, "square", 0.026, 1176, 0.055);
+  playTone(1568, 0.16, "sawtooth", 0.018, 1046, 0.12);
+}
+
+function playMiniImpactSound(type, intensity) {
+  const strength = clamp(intensity || 1, 0.6, 2.5);
+
+  if (type === "won") {
+    playWinSound();
+    playOverdriveSound();
+    return;
+  }
+
+  if (type === "wrong" || type === "crash" || type === "gameover" || type === "miss") {
+    playNoise(0.12 + strength * 0.035, 0.038 + strength * 0.012);
+    playTone(type === "miss" ? 118 : 74, 0.18, "sawtooth", 0.044 + strength * 0.01, type === "miss" ? 58 : 36, 0.015);
+    return;
+  }
+
+  if (type === "brick" || type === "chip" || type === "correct") {
+    const base = type === "chip" ? 680 : type === "correct" ? 760 : 540;
+    playTone(base, 0.055, "square", 0.026 + strength * 0.004, base * 1.42);
+    playTone(base * 1.88, 0.06, "triangle", 0.012 + strength * 0.003, base * 2.2, 0.025);
+    return;
+  }
+
+  if (type === "round" || type === "start") {
+    playTone(260, 0.08, "triangle", 0.028, 520);
+    playTone(1040, 0.09, "square", 0.016, 780, 0.045);
+    return;
+  }
+
+  if (type === "spawn" || type === "show") {
+    playTone(type === "spawn" ? 180 : 920, 0.045, "sine", 0.014 + strength * 0.002, type === "spawn" ? 360 : 1240);
+    return;
+  }
+
+  playTone(type === "paddle" ? 430 : 320, 0.045, "square", 0.018, type === "paddle" ? 740 : 520);
+}
+
 function triggerEatFeedback(cell, points, combo, now) {
   eatFeedbacks.push({
     cell: { x: cell.x, y: cell.y },
@@ -2349,6 +3117,7 @@ function keyPressed() {
   unlockAudio();
 
   const keyName = String(key).toLowerCase();
+  setPressedKey(keyName, keyCode, true);
 
   if (keyName === "l") {
     toggleLanguage();
@@ -2365,13 +3134,30 @@ function keyPressed() {
     return false;
   }
 
-  if (keyName === "m" && screen === "playing") {
-    returnToModeSelect();
+  if (keyName === "h" && (screen === "select" || screen === "achievements" || screen === "playing" || screen === "miniPlaying")) {
+    returnToHome();
     return false;
   }
 
-  if (keyName === "h" && (screen === "select" || screen === "achievements")) {
-    returnToHome();
+  if (screen === "miniPlaying") {
+    if (keyCode === ENTER || keyName === "r") {
+      resetMiniGame();
+      return false;
+    }
+
+    const now = millis();
+    const env = getMiniGameEnv(now);
+
+    if (activeMiniGame && activeMiniGameState && activeMiniGame.keyPressed(activeMiniGameState, keyName, keyCode, env)) {
+      drainMiniGameEvents(env, now);
+      return false;
+    }
+
+    return false;
+  }
+
+  if (keyName === "m" && screen === "playing") {
+    returnToModeSelect();
     return false;
   }
 
@@ -2438,6 +3224,25 @@ function keyPressed() {
   return true;
 }
 
+function keyReleased() {
+  setPressedKey(String(key).toLowerCase(), keyCode, false);
+  return true;
+}
+
+function setPressedKey(keyName, code, isActive) {
+  if (keyName) {
+    pressedKeys[keyName] = isActive;
+  }
+
+  if (Number.isFinite(code)) {
+    pressedKeys[code] = isActive;
+  }
+}
+
+function isPressed(value) {
+  return Boolean(pressedKeys[value]);
+}
+
 function getModeIdFromNumber(value) {
   const numeric = Number(value);
 
@@ -2487,6 +3292,22 @@ function mousePressed() {
   return handlePointer(mouseX, mouseY);
 }
 
+function mouseDragged() {
+  if (screen === "miniPlaying") {
+    return handleMiniGamePointerMoved(mouseX, mouseY);
+  }
+
+  return true;
+}
+
+function mouseMoved() {
+  if (screen === "miniPlaying") {
+    return handleMiniGamePointerMoved(mouseX, mouseY);
+  }
+
+  return true;
+}
+
 function touchStarted() {
   lastTouchAt = millis();
   const touch = getTouchPoint();
@@ -2497,6 +3318,11 @@ function touchStarted() {
 
 function touchMoved(event) {
   const touch = getTouchPoint(event);
+
+  if (screen === "miniPlaying") {
+    return handleMiniGamePointerMoved(touch.x, touch.y);
+  }
+
   tryHandleSwipe(touch.x, touch.y);
   return false;
 }
@@ -2521,6 +3347,36 @@ function handlePointer(x, y) {
 
     if (selectedGame) {
       enterGame(selectedGame.gameId);
+    }
+
+    return false;
+  }
+
+  if (screen === "miniPlaying") {
+    if (homeBackButton && pointInRect(x, y, homeBackButton)) {
+      returnToHome();
+      return false;
+    }
+
+    if (languageButton && pointInRect(x, y, languageButton)) {
+      toggleLanguage();
+      return false;
+    }
+
+    if (!activeMiniGame || !activeMiniGameState) {
+      return false;
+    }
+
+    if (activeMiniGameState.status !== "running") {
+      resetMiniGame();
+      return false;
+    }
+
+    if (miniGameArea && pointInRect(x, y, miniGameArea) && activeMiniGame.pointerPressed) {
+      const now = millis();
+      const env = getMiniGameEnv(now);
+      activeMiniGame.pointerPressed(activeMiniGameState, x, y, env);
+      drainMiniGameEvents(env, now);
     }
 
     return false;
@@ -2592,6 +3448,21 @@ function handlePointer(x, y) {
 
   if (control) {
     SnakeLogic.setDirection(game, control.direction);
+  }
+
+  return false;
+}
+
+function handleMiniGamePointerMoved(x, y) {
+  if (screen !== "miniPlaying" || !activeMiniGame || !activeMiniGameState || activeMiniGameState.status !== "running") {
+    return false;
+  }
+
+  if (miniGameArea && pointInRect(x, y, miniGameArea) && activeMiniGame.pointerMoved) {
+    const now = millis();
+    const env = getMiniGameEnv(now);
+    activeMiniGame.pointerMoved(activeMiniGameState, x, y, env);
+    drainMiniGameEvents(env, now);
   }
 
   return false;
@@ -2698,23 +3569,44 @@ function getDistanceSquared(x, y, control) {
 }
 
 function enterGame(gameId) {
-  if (gameId !== "snake") {
+  if (gameId === "snake") {
+    activeGameId = gameId;
+    activeMiniGame = null;
+    activeMiniGameState = null;
+    screen = "select";
+    paused = false;
+    currentRun = null;
+    activeDailyChallenge = null;
+    clearFeedback();
+    playModeSound();
+    return;
+  }
+
+  const miniGame = MINI_GAMES[gameId];
+
+  if (!miniGame) {
     return;
   }
 
   activeGameId = gameId;
-  screen = "select";
+  activeMiniGame = miniGame;
+  activeMiniGameState = miniGame.createState();
+  miniGameArea = null;
+  pressedKeys = Object.create(null);
+  screen = "miniPlaying";
   paused = false;
   currentRun = null;
   activeDailyChallenge = null;
   clearFeedback();
-  playModeSound();
+  triggerMiniGameStartFeedback();
 }
 
 function startMode(modeId, options) {
   const settings = options || {};
   const dailyChallenge = settings.dailyChallenge || null;
   activeGameId = "snake";
+  activeMiniGame = null;
+  activeMiniGameState = null;
   activeModeId = SnakeLogic.getModeConfig(modeId).id;
   activeDailyChallenge = dailyChallenge;
   game = SnakeLogic.createGame({
@@ -2763,6 +3655,8 @@ function openProgressionArchive() {
   }
 
   activeGameId = "snake";
+  activeMiniGame = null;
+  activeMiniGameState = null;
   screen = "achievements";
   paused = false;
   clearFeedback();
@@ -2771,6 +3665,8 @@ function openProgressionArchive() {
 
 function returnToModeSelect() {
   activeGameId = "snake";
+  activeMiniGame = null;
+  activeMiniGameState = null;
   screen = "select";
   paused = false;
   currentRun = null;
@@ -2781,6 +3677,10 @@ function returnToModeSelect() {
 function returnToHome() {
   screen = "home";
   activeGameId = null;
+  activeMiniGame = null;
+  activeMiniGameState = null;
+  miniGameArea = null;
+  pressedKeys = Object.create(null);
   paused = false;
   currentRun = null;
   activeDailyChallenge = null;
@@ -2788,6 +3688,16 @@ function returnToHome() {
   moreModesExpanded = false;
   clearFeedback();
   playModeSound();
+}
+
+function resetMiniGame() {
+  if (!activeMiniGame) {
+    return;
+  }
+
+  activeMiniGameState = activeMiniGame.createState();
+  clearFeedback();
+  triggerMiniGameStartFeedback();
 }
 
 function togglePause() {
@@ -2868,6 +3778,7 @@ function clearFeedback() {
   eatFeedbacks = [];
   teleportFeedbacks = [];
   impactEvents = [];
+  miniFeedbacks = [];
 }
 
 function windowResized() {
