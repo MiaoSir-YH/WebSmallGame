@@ -470,6 +470,9 @@
         speedLevel: game.speedLevel,
         modeId: game.modeId,
         portalRelocated,
+        teleported: Boolean(portalMove),
+        from: portalMove ? portalMove.from : null,
+        to: portalMove ? portalMove.to : null,
       };
     } else {
       game.snake.pop();

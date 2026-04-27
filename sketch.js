@@ -23,6 +23,7 @@ const PALETTE = {
 const I18N = globalThis.WebSmallGameI18N;
 const DEFAULT_LANGUAGE = I18N.defaultLanguage;
 const COPY = I18N.copy;
+const Progression = globalThis.WebSmallGameProgression || null;
 
 let game;
 let board;
@@ -30,6 +31,10 @@ let screen = "select";
 let activeModeId = "classic";
 let modeCards = [];
 let languageButton = null;
+let progressionArchiveButton = null;
+let dailyChallengeCard = null;
+let archiveBackButton = null;
+let mobileModeButton = null;
 let touchControls = [];
 let touchStart = null;
 let paused = false;
@@ -46,12 +51,19 @@ let feedbackMode = "full";
 let language = DEFAULT_LANGUAGE;
 let muted = false;
 let audioState = { context: null, unlocked: false };
+let progressionSummary = null;
+let todayChallenge = null;
+let currentRun = null;
+let activeDailyChallenge = null;
+let progressionToasts = [];
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(Math.min(window.devicePixelRatio || 1, 2));
   textFont('"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif');
   setLanguage(DEFAULT_LANGUAGE);
+  refreshProgressionSummary();
+  ensureDailyChallenge();
   game = SnakeLogic.createGame({ cols: GRID_COLS, rows: GRID_ROWS, modeId: activeModeId });
   calculateLayout();
 }
@@ -70,9 +82,14 @@ function draw() {
     SnakeLogic.stepGame(game);
     lastStepAt = now;
     handleGameEvent(game.lastEvent, now);
+    handleProgressionStep(game.lastEvent, now);
 
     if (previousStatus !== game.status && game.status === "gameover") {
       gameOverFlashUntil = Math.max(gameOverFlashUntil, now + 180);
+    }
+
+    if (game.status !== "running") {
+      finalizeProgressionRun(now);
     }
   }
 
@@ -94,6 +111,31 @@ function formatCopy(template, values) {
   ));
 }
 
+function refreshProgressionSummary(summary) {
+  if (!Progression) {
+    progressionSummary = null;
+    return null;
+  }
+
+  progressionSummary = summary || Progression.getSummary();
+  return progressionSummary;
+}
+
+function ensureDailyChallenge() {
+  if (!Progression) {
+    todayChallenge = null;
+    return null;
+  }
+
+  const nextChallenge = Progression.getDailyChallenge(new Date(), SnakeLogic.MODE_SEQUENCE);
+
+  if (!todayChallenge || todayChallenge.key !== nextChallenge.key) {
+    todayChallenge = nextChallenge;
+  }
+
+  return todayChallenge;
+}
+
 function setLanguage(nextLanguage) {
   if (!COPY[nextLanguage]) {
     return;
@@ -112,22 +154,25 @@ function toggleLanguage() {
 }
 
 function calculateLayout() {
-  const mobileControls = shouldShowTouchControls();
-  const landscapeControls = shouldUseSideTouchControls();
-  const margin = mobileControls ? 16 : 26;
-  const topReserve = mobileControls ? (landscapeControls ? 138 : 176) : 204;
-  const bottomReserve = mobileControls ? getTouchBottomReserve() : 36;
-  const sideReserve = landscapeControls ? getTouchSideReserve() : 0;
+  const mobileViewport = shouldUseTouchLayout();
+  const margin = mobileViewport ? 16 : 26;
+  const progressReserve = Progression ? (mobileViewport ? 22 : 30) : 0;
+  const topReserve = (mobileViewport ? 128 : 204) + progressReserve;
+  const bottomReserve = mobileViewport ? 28 : 36;
+  const sideReserve = 0;
   const availableWidth = Math.max(220, width - margin * 2 - sideReserve);
   const availableHeight = Math.max(220, height - topReserve - bottomReserve);
   const cellSize = Math.max(7, Math.floor(Math.min(availableWidth / GRID_COLS, availableHeight / GRID_ROWS)));
   const boardWidth = cellSize * GRID_COLS;
   const boardHeight = cellSize * GRID_ROWS;
   const playAreaWidth = width - sideReserve;
+  const boardY = mobileViewport
+    ? topReserve
+    : Math.floor(topReserve + Math.max(0, (availableHeight - boardHeight) / 2));
 
   board = {
     x: Math.floor((playAreaWidth - boardWidth) / 2),
-    y: Math.floor(topReserve + Math.max(0, (availableHeight - boardHeight) / 2)),
+    y: boardY,
     w: boardWidth,
     h: boardHeight,
     cell: cellSize,
@@ -135,6 +180,10 @@ function calculateLayout() {
 }
 
 function shouldShowTouchControls() {
+  return false;
+}
+
+function shouldUseTouchLayout() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return width <= TOUCH_BREAKPOINT;
   }
@@ -153,7 +202,7 @@ function shouldShowTouchControls() {
 }
 
 function shouldUseSideTouchControls() {
-  return shouldShowTouchControls() && width > height && height < 560;
+  return false;
 }
 
 function getTouchSideReserve() {
@@ -161,11 +210,7 @@ function getTouchSideReserve() {
 }
 
 function getTouchBottomReserve() {
-  if (shouldUseSideTouchControls()) {
-    return 24;
-  }
-
-  return clamp(height * 0.26, 188, 232);
+  return 28;
 }
 
 function renderScene(now) {
@@ -174,6 +219,13 @@ function renderScene(now) {
 
   if (screen === "select") {
     drawModeSelect(now);
+    drawProgressionToasts(now);
+    return;
+  }
+
+  if (screen === "achievements") {
+    drawProgressionArchive(now);
+    drawProgressionToasts(now);
     return;
   }
 
@@ -196,6 +248,7 @@ function renderScene(now) {
   pop();
 
   drawFlash(now);
+  drawProgressionToasts(now);
 }
 
 function drawPunkBackdrop(now) {
@@ -363,12 +416,43 @@ function drawReadableText(label, x, y, options) {
   pop();
 }
 
+function drawFittedReadableText(label, x, y, maxWidth, options) {
+  const settings = options || {};
+  const size = getFittedTextSize(label, maxWidth, settings.size || 20, settings.minSize || 12);
+  drawReadableText(label, x, y, { ...settings, size });
+}
+
+function getFittedTextSize(label, maxWidth, preferredSize, minSize) {
+  let size = preferredSize;
+
+  push();
+  while (size > minSize) {
+    setNativeTextStyle(CENTER, CENTER, BOLD, size);
+
+    if (drawingContext.measureText(String(label)).width <= maxWidth) {
+      break;
+    }
+
+    size -= 1;
+  }
+  pop();
+
+  return size;
+}
+
 function drawModeSelect(now) {
   modeCards = [];
   languageButton = null;
+  progressionArchiveButton = null;
+  dailyChallengeCard = null;
+  archiveBackButton = null;
+  mobileModeButton = null;
   touchControls = [];
-  const titleY = clamp(height * 0.034, 14, 30);
-  const titleSize = clamp(width * 0.052, 58, 92);
+  refreshProgressionSummary();
+  ensureDailyChallenge();
+  const compact = width < 760 || shouldUseTouchLayout();
+  const titleY = compact ? 12 : clamp(height * 0.034, 14, 30);
+  const titleSize = compact ? clamp(width * 0.09, 32, 42) : clamp(width * 0.052, 58, 92);
 
   drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
     baseline: TOP,
@@ -377,7 +461,7 @@ function drawModeSelect(now) {
   });
 
   drawReadableText(getCopy().appSubtitle, width / 2, titleY + titleSize + 22, {
-    size: clamp(width * 0.016, 18, 26),
+    size: compact ? clamp(width * 0.032, 12, 15) : clamp(width * 0.016, 18, 26),
     style: BOLD,
     primary: PALETTE.limeText,
     glow: PALETTE.cyan,
@@ -385,7 +469,6 @@ function drawModeSelect(now) {
 
   drawLanguageButton();
 
-  const compact = width < 760;
   const columns = compact ? 1 : 2;
   const gap = compact ? 12 : 18;
   const margin = compact ? 20 : 34;
@@ -441,10 +524,216 @@ function drawModeSelect(now) {
     text(getModeHint(modeId), x + 18, y + cardH - 27, cardW - 36, 18);
     pop();
   });
+
+  drawProgressionSelectPanel(startY + totalH + 18, now);
 }
 
 function getModeHint(modeId) {
   return getModeCopy(modeId).hint;
+}
+
+function drawProgressionSelectPanel(preferredY, now) {
+  if (!Progression) {
+    return;
+  }
+
+  const summary = progressionSummary || refreshProgressionSummary();
+  const challenge = todayChallenge || ensureDailyChallenge();
+  const copy = getCopy().progression;
+  const compact = width < 760;
+  const margin = compact ? 18 : 34;
+  const gap = compact ? 10 : 14;
+  const totalW = Math.min(width - margin * 2, compact ? 440 : 840);
+  const cardH = compact ? 62 : 88;
+  const cardW = compact ? totalW : (totalW - gap) / 2;
+  const totalH = compact ? cardH * 2 + gap : cardH;
+  const x = (width - totalW) / 2;
+  const y = clamp(preferredY, 112, Math.max(112, height - totalH - 18));
+
+  progressionArchiveButton = { x, y, w: cardW, h: cardH };
+  dailyChallengeCard = compact
+    ? { x, y: y + cardH + gap, w: cardW, h: cardH }
+    : { x: x + cardW + gap, y, w: cardW, h: cardH };
+
+  drawProgressionSummaryCard(progressionArchiveButton, summary, copy);
+  drawDailyChallengeSelectCard(dailyChallengeCard, challenge, summary, copy, now);
+}
+
+function drawProgressionSummaryCard(bounds, summary, copy) {
+  push();
+  drawingContext.shadowBlur = 12;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.cyan);
+  strokeWeight(1.5);
+  fill(6, 11, 22, 222);
+  rect(bounds.x, bounds.y, bounds.w, bounds.h, 6);
+
+  noStroke();
+  fill(PALETTE.pink);
+  rect(bounds.x, bounds.y, 5, bounds.h);
+
+  textAlign(LEFT, TOP);
+  textStyle(BOLD);
+  textSize(bounds.h < 70 ? 18 : 22);
+  fill(PALETTE.white);
+  text(copy.archiveButton, bounds.x + 18, bounds.y + 12, bounds.w - 36, 24);
+
+  textStyle(NORMAL);
+  textSize(bounds.h < 70 ? 12 : 14);
+  fill(PALETTE.acid);
+  text(formatCopy(copy.archiveSummary, {
+    chips: summary.chips,
+    done: summary.unlockedAchievements,
+    total: summary.totalAchievements,
+  }), bounds.x + 18, bounds.y + (bounds.h < 70 ? 38 : 48), bounds.w - 36, 24);
+  pop();
+}
+
+function drawDailyChallengeSelectCard(bounds, challenge, summary, copy, now) {
+  const cleared = Boolean(summary.todayCleared);
+  const modeTitle = getModeCopy(challenge.modeId).title;
+  const targetLabel = formatDailyTarget(challenge);
+  const pulse = cleared ? 0 : 0.55 + sin(now * 0.008) * 0.18;
+
+  push();
+  drawingContext.shadowBlur = cleared ? 10 : 18 + pulse * 8;
+  drawingContext.shadowColor = cleared ? PALETTE.acid : PALETTE.pink;
+  stroke(cleared ? PALETTE.acid : PALETTE.pink);
+  strokeWeight(cleared ? 1.5 : 2);
+  fill(6, 11, 22, 222);
+  rect(bounds.x, bounds.y, bounds.w, bounds.h, 6);
+
+  noStroke();
+  fill(0, 229, 255, cleared ? 40 : 64 + pulse * 60);
+  rect(bounds.x, bounds.y, 5, bounds.h);
+
+  textAlign(LEFT, TOP);
+  textStyle(BOLD);
+  textSize(bounds.h < 70 ? 17 : 22);
+  fill(cleared ? PALETTE.acid : PALETTE.white);
+  text(cleared ? copy.dailyCleared : copy.dailyTitle, bounds.x + 18, bounds.y + 12, bounds.w - 36, 24);
+
+  textStyle(NORMAL);
+  textSize(bounds.h < 70 ? 12 : 14);
+  fill(PALETTE.limeText);
+  text(formatCopy(copy.dailySummary, {
+    mode: modeTitle,
+    target: targetLabel,
+  }), bounds.x + 18, bounds.y + (bounds.h < 70 ? 38 : 48), bounds.w - 36, 32);
+  pop();
+}
+
+function drawProgressionArchive(now) {
+  modeCards = [];
+  languageButton = null;
+  progressionArchiveButton = null;
+  dailyChallengeCard = null;
+  mobileModeButton = null;
+  touchControls = [];
+  refreshProgressionSummary();
+
+  const copy = getCopy().progression;
+  const summary = progressionSummary;
+  const compact = width < 760;
+  const margin = compact ? 16 : 34;
+  const titleSize = compact ? 32 : 68;
+  const titleY = compact ? 18 : 26;
+
+  drawNeonLogo(copy.archiveTitle, width / 2, titleY, titleSize, now, {
+    baseline: TOP,
+    maxWidth: width * 0.82,
+    glowScale: 0.42,
+  });
+
+  archiveBackButton = { x: margin, y: compact ? 20 : 28, w: compact ? 82 : 104, h: compact ? 30 : 34 };
+  drawArchiveBackButton(copy.backToModes);
+
+  drawReadableText(formatCopy(copy.archiveSummary, {
+    chips: summary.chips,
+    done: summary.unlockedAchievements,
+    total: summary.totalAchievements,
+  }), width / 2, titleY + titleSize + 18, {
+    size: compact ? 17 : 23,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
+
+  drawAchievementGrid(titleY + titleSize + (compact ? 54 : 70), compact);
+}
+
+function drawArchiveBackButton(label) {
+  push();
+  drawingContext.shadowBlur = 10;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.cyan);
+  strokeWeight(1.4);
+  fill(6, 11, 22, 220);
+  rect(archiveBackButton.x, archiveBackButton.y, archiveBackButton.w, archiveBackButton.h, 5);
+  noStroke();
+  fill(PALETTE.acid);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(12);
+  text(label, archiveBackButton.x + archiveBackButton.w / 2, archiveBackButton.y + archiveBackButton.h / 2 + 0.5);
+  pop();
+}
+
+function drawAchievementGrid(startY, compact) {
+  const copy = getCopy().progression;
+  const achievements = Progression.getAchievements();
+  const columns = width < 360 ? 1 : width < 920 ? 2 : 3;
+  const gap = compact ? 8 : 14;
+  const margin = compact ? 16 : 34;
+  const cardW = (width - margin * 2 - gap * (columns - 1)) / columns;
+  const cardH = compact ? 68 : 86;
+  const totalW = cardW * columns + gap * (columns - 1);
+  const startX = (width - totalW) / 2;
+  const y = Math.min(startY, Math.max(128, height - Math.ceil(achievements.length / columns) * (cardH + gap) - 18));
+
+  achievements.forEach((achievement, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const x = startX + col * (cardW + gap);
+    const cardY = y + row * (cardH + gap);
+    const achievementCopy = copy.achievements[achievement.id] || { title: achievement.id, description: "" };
+    const unlocked = achievement.unlocked;
+
+    push();
+    drawingContext.shadowBlur = unlocked ? 14 : 5;
+    drawingContext.shadowColor = unlocked ? PALETTE.acid : PALETTE.cyan;
+    stroke(unlocked ? PALETTE.acid : colorWithAlpha(PALETTE.cyan, 90));
+    strokeWeight(unlocked ? 2 : 1);
+    fill(6, 11, 22, unlocked ? 232 : 176);
+    rect(x, cardY, cardW, cardH, 6);
+
+    noStroke();
+    fill(unlocked ? PALETTE.acid : colorWithAlpha(PALETTE.pink, 110));
+    rect(x, cardY, 5, cardH);
+
+    textAlign(LEFT, TOP);
+    textStyle(BOLD);
+    textSize(compact ? 14 : 17);
+    fill(unlocked ? PALETTE.white : colorWithAlpha(PALETTE.white, 132));
+    text(achievementCopy.title, x + 14, cardY + 10, cardW - 28, compact ? 20 : 24);
+
+    textStyle(NORMAL);
+    textSize(compact ? 11 : 13);
+    fill(unlocked ? PALETTE.limeText : colorWithAlpha(PALETTE.limeText, 132));
+    text(
+      compact ? (unlocked ? copy.unlocked : copy.locked) : achievementCopy.description,
+      x + 14,
+      cardY + (compact ? 36 : 40),
+      cardW - 28,
+      compact ? 22 : 36,
+    );
+    pop();
+  });
+}
+
+function formatDailyTarget(challenge) {
+  const targets = getCopy().progression.dailyTargets;
+  const template = targets[challenge.metric] || targets.score;
+  return formatCopy(template, { target: challenge.target });
 }
 
 function drawLanguageButton() {
@@ -476,16 +765,18 @@ function drawLanguageButton() {
 }
 
 function drawHeader(now) {
+  mobileModeButton = null;
   const scoreLabel = String(game.score).padStart(4, "0");
-  const compact = width < 720 || shouldShowTouchControls();
+  const touchLayout = shouldUseTouchLayout();
+  const compact = width < 720 || touchLayout;
   const pulse = getScorePulse(now);
   const copy = getCopy();
   const modeCopy = getModeCopy(game.modeId);
-  const titleTop = compact ? 10 : 14;
-  const titleSize = (compact ? clamp(Math.min(width, height) * 0.13, 46, 60) : clamp(width * 0.04, 64, 78)) + pulse * 4;
-  const lineSize = compact ? clamp(Math.min(width, height) * 0.04, 18, 22) : clamp(width * 0.013, 22, 26);
-  const firstLineY = titleTop + titleSize + (compact ? 20 : 28);
-  const secondLineY = firstLineY + lineSize + (compact ? 10 : 12);
+  const titleTop = compact ? 8 : 14;
+  const titleSize = (compact ? clamp(Math.min(width, height) * 0.075, 28, 38) : clamp(width * 0.04, 64, 78)) + pulse * (compact ? 2 : 4);
+  const lineSize = compact ? clamp(Math.min(width, height) * 0.032, 14, 18) : clamp(width * 0.013, 22, 26);
+  const firstLineY = titleTop + titleSize + (compact ? 12 : 28);
+  const secondLineY = firstLineY + lineSize + (compact ? 6 : 12);
 
   push();
   drawNeonLogo("WebSmallGame", width / 2 + 2, titleTop, titleSize, now, {
@@ -495,6 +786,10 @@ function drawHeader(now) {
     offset: Math.max(1, titleSize * 0.018),
     glowScale: 0.36,
   });
+
+  if (touchLayout) {
+    drawMobileModeButton(copy);
+  }
 
   if (compact) {
     drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, firstLineY, {
@@ -520,7 +815,68 @@ function drawHeader(now) {
     });
   }
 
+  drawRunGoalsStatus(secondLineY + lineSize + (compact ? 8 : 10), compact);
   pop();
+}
+
+function drawMobileModeButton(copy) {
+  const buttonW = 66;
+  const buttonH = 30;
+  const x = 14;
+  const y = 12;
+  const label = getMobileModeButtonLabel(copy);
+
+  mobileModeButton = { x, y, w: buttonW, h: buttonH };
+
+  push();
+  drawingContext.shadowBlur = 12;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.cyan);
+  strokeWeight(1.4);
+  fill(6, 11, 22, 226);
+  rect(x, y, buttonW, buttonH, 5);
+  noStroke();
+  fill(PALETTE.acid);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(12);
+  text(label, x + buttonW / 2, y + buttonH / 2 + 0.5);
+  pop();
+}
+
+function getMobileModeButtonLabel(copy) {
+  return String(copy.modeShortcut || "MODE").replace(/^M\s*/i, "");
+}
+
+function drawRunGoalsStatus(y, compact) {
+  if (!Progression || !currentRun) {
+    return;
+  }
+
+  const copy = getCopy().progression;
+  const goals = Progression.getRunGoalStatus(currentRun, game);
+  const daily = Progression.getDailyRunStatus(currentRun);
+  const contractLabel = goals.map((goal) => formatContractStatus(goal)).join("  |  ");
+  const dailyLabel = daily
+    ? `  |  ${daily.complete ? copy.dailyDone : copy.dailyTitle}: ${formatGoalProgress(daily)} ${formatDailyTarget(daily)}`
+    : "";
+  const label = `${copy.contractsTitle} ${contractLabel}${dailyLabel}`;
+
+  drawFittedReadableText(label, width / 2, y, width * 0.92, {
+    size: compact ? 15 : 19,
+    minSize: compact ? 11 : 14,
+    primary: PALETTE.amber,
+    glow: PALETTE.pink,
+  });
+}
+
+function formatContractStatus(goal) {
+  const contractCopy = getCopy().progression.contracts[goal.id] || { short: goal.id };
+  return `${goal.complete ? getCopy().progression.goalDone : formatGoalProgress(goal)} ${contractCopy.short}`;
+}
+
+function formatGoalProgress(goal) {
+  return `${Math.min(goal.value, goal.target)}/${goal.target}`;
 }
 
 function getModeStatus() {
@@ -722,6 +1078,108 @@ function handleGameEvent(event, now) {
   if (event.type === "crash") {
     triggerCrashImpact(event, now);
   }
+}
+
+function handleProgressionStep(event, now) {
+  if (!Progression || !currentRun) {
+    return;
+  }
+
+  const result = Progression.recordStep(currentRun, game, event);
+  currentRun = result.run;
+  refreshProgressionSummary(result.profile);
+  pushProgressionRewards(result.rewards, now);
+}
+
+function finalizeProgressionRun(now) {
+  if (!Progression || !currentRun || currentRun.finalized) {
+    return;
+  }
+
+  const result = Progression.finalizeRun(currentRun, game);
+  currentRun = result.run;
+  refreshProgressionSummary(result.profile);
+  pushProgressionRewards(result.rewards, now);
+}
+
+function pushProgressionRewards(rewards, now) {
+  if (!rewards || rewards.length === 0) {
+    return;
+  }
+
+  const copy = getCopy().progression;
+
+  rewards.forEach((reward, index) => {
+    progressionToasts.push({
+      label: getRewardLabel(reward, copy),
+      sublabel: formatCopy(copy.rewardChips, { chips: reward.chips }),
+      startedAt: now + index * 180,
+      duration: 2600,
+    });
+  });
+
+  if (progressionToasts.length > 5) {
+    progressionToasts.splice(0, progressionToasts.length - 5);
+  }
+}
+
+function getRewardLabel(reward, copy) {
+  if (reward.category === "contract") {
+    const contractCopy = copy.contracts[reward.id] || { short: reward.id };
+    return formatCopy(copy.rewardContract, { name: contractCopy.short });
+  }
+
+  if (reward.category === "achievement") {
+    const achievementCopy = copy.achievements[reward.id] || { title: reward.id };
+    return formatCopy(copy.rewardAchievement, { name: achievementCopy.title });
+  }
+
+  return copy.rewardDaily;
+}
+
+function drawProgressionToasts(now) {
+  progressionToasts = progressionToasts.filter((toast) => now - toast.startedAt <= toast.duration);
+
+  if (progressionToasts.length === 0) {
+    return;
+  }
+
+  const margin = width < 640 ? 14 : 24;
+  const toastW = Math.min(width - margin * 2, width < 640 ? 300 : 360);
+  const toastH = 58;
+  const x = width - toastW - margin;
+
+  progressionToasts.forEach((toast, index) => {
+    const age = Math.max(0, now - toast.startedAt);
+    const fadeOut = clamp((toast.duration - age) / 360, 0, 1);
+    const fadeIn = clamp(age / 220, 0, 1);
+    const alpha = Math.min(fadeIn, fadeOut);
+    const y = margin + index * (toastH + 10);
+
+    push();
+    drawingContext.shadowBlur = 18 * alpha;
+    drawingContext.shadowColor = PALETTE.acid;
+    stroke(colorWithAlpha(PALETTE.acid, 190 * alpha));
+    strokeWeight(1.5);
+    fill(colorWithAlpha(PALETTE.board, 226 * alpha));
+    rect(x, y, toastW, toastH, 6);
+
+    noStroke();
+    fill(colorWithAlpha(PALETTE.pink, 180 * alpha));
+    rect(x, y, 5, toastH);
+
+    textAlign(LEFT, TOP);
+    textStyle(BOLD);
+    textSize(15);
+    fill(colorWithAlpha(PALETTE.white, 250 * alpha));
+    text(toast.label, x + 16, y + 10, toastW - 32, 20);
+
+    textStyle(NORMAL);
+    textSize(13);
+    fill(colorWithAlpha(PALETTE.acid, 240 * alpha));
+    text(toast.sublabel, x + 16, y + 34, toastW - 32, 18);
+    pop();
+  });
 }
 
 function triggerEatImpact(event, now) {
@@ -1115,11 +1573,23 @@ function addHitStop(duration) {
 }
 
 function vibrate(pattern) {
-  if (feedbackMode !== "full" || !navigator.vibrate) {
+  if (feedbackMode !== "full" || !canUseVibration()) {
     return;
   }
 
   navigator.vibrate(pattern);
+}
+
+function canUseVibration() {
+  if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+    return false;
+  }
+
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) {
+    return false;
+  }
+
+  return true;
 }
 
 function cellToPoint(cell) {
@@ -1548,7 +2018,25 @@ function keyPressed() {
     return false;
   }
 
+  if (screen === "achievements") {
+    if (keyName === "a" || keyCode === ESCAPE) {
+      returnToModeSelect();
+    }
+
+    return false;
+  }
+
   if (screen === "select") {
+    if (keyName === "a") {
+      openProgressionArchive();
+      return false;
+    }
+
+    if (keyName === "d") {
+      startDailyChallenge();
+      return false;
+    }
+
     const selectedMode = getModeIdFromNumber(keyName);
 
     if (selectedMode) {
@@ -1619,7 +2107,7 @@ function mousePressed() {
 function touchStarted() {
   lastTouchAt = millis();
   const touch = getTouchPoint();
-  const startsOnControl = Boolean(findTouchControl(touch.x, touch.y));
+  const startsOnControl = Boolean(findTouchControl(touch.x, touch.y) || findMobileActionButton(touch.x, touch.y));
   touchStart = shouldTrackSwipe(startsOnControl) ? { x: touch.x, y: touch.y, handled: false } : null;
   return handlePointer(touch.x, touch.y);
 }
@@ -1640,9 +2128,27 @@ function touchEnded(event) {
 function handlePointer(x, y) {
   unlockAudio();
 
+  if (screen === "achievements") {
+    if (archiveBackButton && pointInRect(x, y, archiveBackButton)) {
+      returnToModeSelect();
+    }
+
+    return false;
+  }
+
   if (screen === "select") {
     if (languageButton && pointInRect(x, y, languageButton)) {
       toggleLanguage();
+      return false;
+    }
+
+    if (progressionArchiveButton && pointInRect(x, y, progressionArchiveButton)) {
+      openProgressionArchive();
+      return false;
+    }
+
+    if (dailyChallengeCard && pointInRect(x, y, dailyChallengeCard)) {
+      startDailyChallenge();
       return false;
     }
 
@@ -1652,6 +2158,13 @@ function handlePointer(x, y) {
       startMode(card.modeId);
     }
 
+    return false;
+  }
+
+  const mobileAction = findMobileActionButton(x, y);
+
+  if (mobileAction === "mode") {
+    returnToModeSelect();
     return false;
   }
 
@@ -1687,7 +2200,7 @@ function getTouchPoint(event) {
 
 function shouldTrackSwipe(startsOnControl) {
   return (
-    shouldShowTouchControls() &&
+    shouldUseTouchLayout() &&
     screen === "playing" &&
     game.status === "running" &&
     !paused &&
@@ -1739,6 +2252,14 @@ function findTouchControl(x, y) {
   ));
 }
 
+function findMobileActionButton(x, y) {
+  if (screen === "playing" && mobileModeButton && pointInRect(x, y, mobileModeButton)) {
+    return "mode";
+  }
+
+  return null;
+}
+
 function pointInRect(x, y, rectBounds) {
   return (
     x >= rectBounds.x &&
@@ -1759,9 +2280,18 @@ function getDistanceSquared(x, y, control) {
   return dx * dx + dy * dy;
 }
 
-function startMode(modeId) {
+function startMode(modeId, options) {
+  const settings = options || {};
+  const dailyChallenge = settings.dailyChallenge || null;
   activeModeId = SnakeLogic.getModeConfig(modeId).id;
-  game = SnakeLogic.createGame({ cols: GRID_COLS, rows: GRID_ROWS, modeId: activeModeId });
+  activeDailyChallenge = dailyChallenge;
+  game = SnakeLogic.createGame({
+    cols: GRID_COLS,
+    rows: GRID_ROWS,
+    modeId: activeModeId,
+    random: dailyChallenge && Progression ? Progression.createSeededRandom(dailyChallenge.seed) : Math.random,
+  });
+  startProgressionRun(activeModeId, dailyChallenge, millis());
   screen = "playing";
   paused = false;
   lastStepAt = millis();
@@ -1769,15 +2299,58 @@ function startMode(modeId) {
   triggerModeStartFeedback(activeModeId, millis());
 }
 
+function startProgressionRun(modeId, dailyChallenge, now) {
+  if (!Progression) {
+    currentRun = null;
+    return;
+  }
+
+  const result = Progression.startRun({
+    modeId,
+    daily: Boolean(dailyChallenge),
+    challenge: dailyChallenge,
+  });
+  currentRun = result.run;
+  refreshProgressionSummary(result.profile);
+  pushProgressionRewards(result.rewards, now);
+}
+
+function startDailyChallenge() {
+  const challenge = ensureDailyChallenge();
+
+  if (!challenge) {
+    return;
+  }
+
+  startMode(challenge.modeId, { dailyChallenge: challenge });
+}
+
+function openProgressionArchive() {
+  if (!Progression) {
+    return;
+  }
+
+  screen = "achievements";
+  paused = false;
+  clearFeedback();
+  playModeSound();
+}
+
 function returnToModeSelect() {
   screen = "select";
   paused = false;
+  currentRun = null;
+  activeDailyChallenge = null;
   clearFeedback();
 }
 
 function togglePause() {
   if (screen === "playing" && game.status === "running") {
     paused = !paused;
+
+    if (paused && Progression) {
+      currentRun = Progression.markPaused(currentRun);
+    }
   }
 }
 
@@ -1797,7 +2370,7 @@ function toggleFeedbackMode() {
     hitStopUntil = 0;
     screenShake = { startedAt: 0, until: 0, duration: 0, magnitude: 0 };
 
-    if (navigator.vibrate) {
+    if (canUseVibration()) {
       navigator.vibrate(0);
     }
   } else {
@@ -1818,7 +2391,23 @@ function toggleFeedbackMode() {
 }
 
 function resetGame() {
-  SnakeLogic.restartGame(game, activeModeId);
+  const dailyChallenge = currentRun && currentRun.daily ? currentRun.dailyChallenge : activeDailyChallenge;
+
+  if (dailyChallenge && Progression) {
+    activeModeId = dailyChallenge.modeId;
+    activeDailyChallenge = dailyChallenge;
+    game = SnakeLogic.createGame({
+      cols: GRID_COLS,
+      rows: GRID_ROWS,
+      modeId: activeModeId,
+      random: Progression.createSeededRandom(dailyChallenge.seed),
+    });
+  } else {
+    SnakeLogic.restartGame(game, activeModeId);
+    activeDailyChallenge = null;
+  }
+
+  startProgressionRun(activeModeId, activeDailyChallenge, millis());
   screen = "playing";
   paused = false;
   lastStepAt = millis();
