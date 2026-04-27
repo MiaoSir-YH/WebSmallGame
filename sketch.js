@@ -14,11 +14,153 @@ const PALETTE = {
   violet: "#8f4dff",
 };
 
+const DEFAULT_LANGUAGE = "zh";
+
+const COPY = {
+  zh: {
+    appSubtitle: "霓虹蛇阵已点亮  |  选择模式  |  按 1-4",
+    languageButton: "EN",
+    score: "分数",
+    modeShortcut: "M 模式",
+    resetShortcut: "R 重开",
+    languageShortcut: "L 语言",
+    soundOn: "音效开",
+    soundOff: "音效关",
+    fxFull: "特效完整",
+    fxReduced: "特效精简",
+    modes: {
+      classic: {
+        title: "经典模式",
+        tagline: "熟悉的节奏，考验每一次转弯。",
+        hint: "稳定速度 / 专注走位",
+      },
+      rush: {
+        title: "霓虹疾行",
+        tagline: "连吃越快，节奏越狠。",
+        hint: "连击加分 / 逐步加速",
+      },
+      maze: {
+        title: "电路迷宫",
+        tagline: "电墙封住去路，绕行才是本事。",
+        hint: "固定电墙 / 小心绕行",
+      },
+      portal: {
+        title: "传送漂移",
+        tagline: "传送门会突然改写你的路线。",
+        hint: "每 5 个食物重组传送门",
+      },
+    },
+    status: {
+      classic: "经典巡航",
+      rush: "速度 {speed}  连击 x{combo}",
+      maze: "电墙 {count}",
+      portal: "传送门重组 {current}/{total}",
+    },
+    impact: {
+      overdrive: "超载连击",
+      combo: "连击 x{combo}",
+      gatesShifted: "传送门重组",
+      portalDrift: "路线已改变",
+      modeOnline: "模式启动",
+      fxFull: "完整特效",
+      impactArmed: "冲击反馈已启动",
+    },
+    crash: {
+      electric: { label: "短路", reason: "电墙过载" },
+      body: { label: "撞到自己", reason: "蛇身回环" },
+      wall: { label: "系统崩溃", reason: "边界越界" },
+    },
+    overlay: {
+      paused: "已暂停",
+      won: "棋盘已清空",
+      gameover: "游戏结束",
+      progressSaved: "当前进度已保留",
+      finalScore: "最终分数 {score}",
+      resume: "空格 / P 继续",
+      restart: "R / 回车 / 点击重开",
+      backToModes: "M 返回模式选择",
+    },
+    scorePopup: {
+      points: "+{points}",
+      combo: "+{points} 连击 x{combo}",
+    },
+  },
+  en: {
+    appSubtitle: "NEON SNAKE ONLINE  |  CHOOSE A MODE  |  PRESS 1-4",
+    languageButton: "中文",
+    score: "SCORE",
+    modeShortcut: "M MODE",
+    resetShortcut: "R RESET",
+    languageShortcut: "L LANG",
+    soundOn: "SFX ON",
+    soundOff: "SFX OFF",
+    fxFull: "FX FULL",
+    fxReduced: "FX REDUCED",
+    modes: {
+      classic: {
+        title: "Classic",
+        tagline: "The familiar loop, tuned for clean turns.",
+        hint: "steady pace / pure routing",
+      },
+      rush: {
+        title: "Neon Rush",
+        tagline: "Chain pickups and the tempo bites back.",
+        hint: "combo scoring / rising speed",
+      },
+      maze: {
+        title: "Circuit Maze",
+        tagline: "Live wires block the lane. Thread the gap.",
+        hint: "fixed walls / careful routing",
+      },
+      portal: {
+        title: "Portal Drift",
+        tagline: "Twin gates keep rewriting your path.",
+        hint: "gates reshuffle every 5 food",
+      },
+    },
+    status: {
+      classic: "CLASSIC LOOP",
+      rush: "SPD {speed}  COMBO x{combo}",
+      maze: "WALLS {count}",
+      portal: "GATE SHIFT {current}/{total}",
+    },
+    impact: {
+      overdrive: "OVERDRIVE",
+      combo: "COMBO x{combo}",
+      gatesShifted: "GATES SHIFTED",
+      portalDrift: "PORTAL DRIFT",
+      modeOnline: "ONLINE",
+      fxFull: "FX FULL",
+      impactArmed: "IMPACT SYSTEM ARMED",
+    },
+    crash: {
+      electric: { label: "SHORT CIRCUIT", reason: "ELECTRIC WALL" },
+      body: { label: "SELF COLLISION", reason: "SNAKE BODY" },
+      wall: { label: "SYSTEM CRASH", reason: "OUT OF BOUNDS" },
+    },
+    overlay: {
+      paused: "PAUSED",
+      won: "GRID CLEARED",
+      gameover: "GAME OVER",
+      progressSaved: "Run state preserved",
+      finalScore: "FINAL SCORE {score}",
+      resume: "SPACE / P TO RESUME",
+      restart: "R / ENTER / TAP TO RESTART",
+      backToModes: "M BACK TO MODES",
+    },
+    scorePopup: {
+      points: "+{points}",
+      combo: "+{points} x{combo}",
+    },
+  },
+};
+
 let game;
 let board;
 let screen = "select";
 let activeModeId = "classic";
 let modeCards = [];
+let languageButton = null;
 let touchControls = [];
 let paused = false;
 let lastStepAt = 0;
@@ -31,6 +173,7 @@ let impactEvents = [];
 let hitStopUntil = 0;
 let screenShake = { startedAt: 0, until: 0, duration: 0, magnitude: 0 };
 let feedbackMode = "full";
+let language = DEFAULT_LANGUAGE;
 let muted = false;
 let audioState = { context: null, unlocked: false };
 
@@ -38,6 +181,7 @@ function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(Math.min(window.devicePixelRatio || 1, 2));
   textFont('"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif');
+  setLanguage(DEFAULT_LANGUAGE);
   game = SnakeLogic.createGame({ cols: GRID_COLS, rows: GRID_ROWS, modeId: activeModeId });
   calculateLayout();
 }
@@ -63,6 +207,38 @@ function draw() {
   }
 
   renderScene(now);
+}
+
+function getCopy() {
+  return COPY[language] || COPY[DEFAULT_LANGUAGE];
+}
+
+function getModeCopy(modeId) {
+  const copy = getCopy();
+  return copy.modes[modeId] || copy.modes.classic;
+}
+
+function formatCopy(template, values) {
+  return String(template).replace(/\{(\w+)\}/g, (match, key) => (
+    Object.prototype.hasOwnProperty.call(values || {}, key) ? values[key] : match
+  ));
+}
+
+function setLanguage(nextLanguage) {
+  if (!COPY[nextLanguage]) {
+    return;
+  }
+
+  language = nextLanguage;
+
+  if (typeof document !== "undefined" && document.documentElement) {
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+  }
+}
+
+function toggleLanguage() {
+  setLanguage(language === "zh" ? "en" : "zh");
+  playModeSound();
 }
 
 function calculateLayout() {
@@ -140,6 +316,7 @@ function drawPunkBackdrop(now) {
 
 function drawModeSelect(now) {
   modeCards = [];
+  languageButton = null;
   touchControls = [];
 
   push();
@@ -155,8 +332,10 @@ function drawModeSelect(now) {
   fill(PALETTE.acid);
   textStyle(NORMAL);
   textSize(clamp(width * 0.02, 13, 18));
-  text("霓虹贪吃蛇  |  选择模式  |  按 1-4", width / 2, clamp(height * 0.055, 18, 44) + 62);
+  text(getCopy().appSubtitle, width / 2, clamp(height * 0.055, 18, 44) + 62);
   pop();
+
+  drawLanguageButton();
 
   const compact = width < 760;
   const columns = compact ? 1 : 2;
@@ -172,6 +351,7 @@ function drawModeSelect(now) {
 
   SnakeLogic.MODE_SEQUENCE.forEach((modeId, index) => {
     const config = SnakeLogic.getModeConfig(modeId);
+    const modeCopy = getModeCopy(modeId);
     const col = index % columns;
     const row = Math.floor(index / columns);
     const x = startX + col * (cardW + gap);
@@ -201,12 +381,12 @@ function drawModeSelect(now) {
 
     fill(PALETTE.white);
     textSize(compact ? 20 : 24);
-    text(config.title, x + 58, y + 13);
+    text(modeCopy.title, x + 58, y + 13);
 
     textStyle(NORMAL);
     fill(PALETTE.acid);
     textSize(compact ? 12 : 14);
-    text(config.tagline, x + 18, y + (compact ? 48 : 58), cardW - 36, 42);
+    text(modeCopy.tagline, x + 18, y + (compact ? 48 : 58), cardW - 36, 42);
 
     fill(PALETTE.cyan);
     textSize(11);
@@ -216,26 +396,43 @@ function drawModeSelect(now) {
 }
 
 function getModeHint(modeId) {
-  if (modeId === "rush") {
-    return "连击加分 / 逐步加速";
-  }
+  return getModeCopy(modeId).hint;
+}
 
-  if (modeId === "maze") {
-    return "固定电墙 / 小心绕行";
-  }
+function drawLanguageButton() {
+  const compact = width < 640;
+  const label = getCopy().languageButton;
+  const buttonW = compact ? 58 : 74;
+  const buttonH = compact ? 30 : 34;
+  const margin = compact ? 14 : 26;
+  const x = width - buttonW - margin;
+  const y = compact ? 82 : 26;
 
-  if (modeId === "portal") {
-    return "每 5 个食物迁移传送门";
-  }
+  languageButton = { x, y, w: buttonW, h: buttonH };
 
-  return "稳定节奏 / 专注走位";
+  push();
+  drawingContext.shadowBlur = 14;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.cyan);
+  strokeWeight(1.5);
+  fill(6, 11, 22, 220);
+  rect(x, y, buttonW, buttonH, 5);
+
+  noStroke();
+  fill(PALETTE.acid);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(compact ? 12 : 13);
+  text(label, x + buttonW / 2, y + buttonH / 2 + 0.5);
+  pop();
 }
 
 function drawHeader(now) {
   const scoreLabel = String(game.score).padStart(4, "0");
   const compact = width < 640;
   const pulse = getScorePulse(now);
-  const config = SnakeLogic.getModeConfig(game.modeId);
+  const copy = getCopy();
+  const modeCopy = getModeCopy(game.modeId);
 
   push();
   textAlign(CENTER, TOP);
@@ -253,39 +450,45 @@ function drawHeader(now) {
 
   if (compact) {
     textSize(12);
-    text(`${config.title}  |  分数 ${scoreLabel}`, width / 2, 48);
+    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, 48);
     text(`${getModeStatus()}  |  ${getFeedbackStatus()}`, width / 2, 66);
   } else {
     textSize(clamp(width * 0.016, 12, 16));
-    text(
-      `${config.title}  |  分数 ${scoreLabel}  |  ${getModeStatus()}  |  ${getFeedbackStatus()}  |  M 模式  |  R 重开`,
-      width / 2,
-      68
-    );
+    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2, 58);
+    text(`${getFeedbackStatus()}  |  ${copy.modeShortcut}  |  ${copy.resetShortcut}  |  ${copy.languageShortcut}`, width / 2, 78);
   }
 
   pop();
 }
 
 function getModeStatus() {
+  const copy = getCopy();
+
   if (game.modeId === "rush") {
-    return `速度 ${game.speedLevel + 1}  连击 x${game.combo || 0}`;
+    return formatCopy(copy.status.rush, {
+      speed: game.speedLevel + 1,
+      combo: game.combo || 0,
+    });
   }
 
   if (game.modeId === "maze") {
-    return `电墙 ${game.walls.length}`;
+    return formatCopy(copy.status.maze, { count: game.walls.length });
   }
 
   if (game.modeId === "portal") {
     const every = SnakeLogic.getModeConfig("portal").relocateEvery;
-    return `传送门迁移 ${game.foodsEaten % every}/${every}`;
+    return formatCopy(copy.status.portal, {
+      current: game.foodsEaten % every,
+      total: every,
+    });
   }
 
-  return "经典循环";
+  return copy.status.classic;
 }
 
 function getFeedbackStatus() {
-  return `${muted ? "音效关" : "音效开"}  特效${feedbackMode === "full" ? "完整" : "精简"}`;
+  const copy = getCopy();
+  return `${muted ? copy.soundOff : copy.soundOn}  ${feedbackMode === "full" ? copy.fxFull : copy.fxReduced}`;
 }
 
 function drawBoardFrame(now) {
@@ -460,6 +663,7 @@ function handleGameEvent(event, now) {
 }
 
 function triggerEatImpact(event, now) {
+  const copy = getCopy();
   const combo = event.combo || 1;
   const overdrive = combo >= 4;
   const intensity = overdrive ? 2.4 : combo >= 2 ? 1.55 : 1;
@@ -488,8 +692,8 @@ function triggerEatImpact(event, now) {
   if (overdrive) {
     addImpactEvent({
       type: "banner",
-      label: "超载",
-      sublabel: `连击 x${combo}`,
+      label: copy.impact.overdrive,
+      sublabel: formatCopy(copy.impact.combo, { combo }),
       tint: PALETTE.acid,
       accent: PALETTE.pink,
       duration: 760,
@@ -500,8 +704,8 @@ function triggerEatImpact(event, now) {
   if (event.portalRelocated) {
     addImpactEvent({
       type: "banner",
-      label: "传送门已迁移",
-      sublabel: "传送漂移",
+      label: copy.impact.gatesShifted,
+      sublabel: copy.impact.portalDrift,
       tint: PALETTE.violet,
       accent: PALETTE.cyan,
       duration: 620,
@@ -536,11 +740,11 @@ function triggerTeleportImpact(event, now) {
 }
 
 function triggerCrashImpact(event, now) {
+  const copy = getCopy();
   const electric = event.reason === "electric";
   const body = event.reason === "body";
   const tint = electric ? PALETTE.cyan : body ? PALETTE.acid : PALETTE.pink;
-  const label = electric ? "短路" : body ? "撞到自己" : "系统崩溃";
-  const reasonLabel = electric ? "电墙" : body ? "蛇身" : "边界";
+  const crashCopy = copy.crash[event.reason] || copy.crash.wall;
 
   addImpactEvent({
     type: "crash",
@@ -563,8 +767,8 @@ function triggerCrashImpact(event, now) {
 
   addImpactEvent({
     type: "banner",
-    label,
-    sublabel: reasonLabel,
+    label: crashCopy.label,
+    sublabel: crashCopy.reason,
     tint,
     accent: PALETTE.pink,
     duration: 900,
@@ -579,12 +783,13 @@ function triggerCrashImpact(event, now) {
 }
 
 function triggerModeStartFeedback(modeId, now) {
-  const config = SnakeLogic.getModeConfig(modeId);
+  const copy = getCopy();
+  const modeCopy = getModeCopy(modeId);
 
   addImpactEvent({
     type: "banner",
-    label: config.title,
-    sublabel: "已上线",
+    label: modeCopy.title,
+    sublabel: copy.impact.modeOnline,
     tint: PALETTE.cyan,
     accent: PALETTE.acid,
     duration: 650,
@@ -1023,7 +1228,10 @@ function drawEatFeedback(now) {
     const cy = board.y + feedback.cell.y * board.cell + board.cell / 2;
     const ringSize = board.cell * (1.1 + progress * (feedback.combo > 1 ? 3.1 : 2.4));
     const textY = cy - board.cell * (progress * 1.8 + 0.35);
-    const label = feedback.combo > 1 ? `+${feedback.points} x${feedback.combo}` : `+${feedback.points}`;
+    const scorePopup = getCopy().scorePopup;
+    const label = feedback.combo > 1
+      ? formatCopy(scorePopup.combo, { points: feedback.points, combo: feedback.combo })
+      : formatCopy(scorePopup.points, { points: feedback.points });
 
     noFill();
     drawingContext.shadowBlur = 22;
@@ -1103,11 +1311,13 @@ function drawStateOverlay() {
     return;
   }
 
+  const copy = getCopy();
+  const overlay = copy.overlay;
   const scoreLabel = String(game.score).padStart(4, "0");
-  const title = paused ? "已暂停" : game.status === "won" ? "棋盘已清空" : "游戏结束";
-  const scoreLine = paused ? "当前进度已保留" : `最终分数 ${scoreLabel}`;
-  const actionLine = paused ? "空格 / P 继续" : "R / 回车 / 点击重开";
-  const modeLine = "M 返回模式选择";
+  const title = paused ? overlay.paused : game.status === "won" ? overlay.won : overlay.gameover;
+  const scoreLine = paused ? overlay.progressSaved : formatCopy(overlay.finalScore, { score: scoreLabel });
+  const actionLine = paused ? overlay.resume : overlay.restart;
+  const modeLine = overlay.backToModes;
 
   push();
   noStroke();
@@ -1217,6 +1427,11 @@ function keyPressed() {
 
   const keyName = String(key).toLowerCase();
 
+  if (keyName === "l") {
+    toggleLanguage();
+    return false;
+  }
+
   if (keyName === "v") {
     toggleMute();
     return false;
@@ -1310,6 +1525,11 @@ function handlePointer(x, y) {
   unlockAudio();
 
   if (screen === "select") {
+    if (languageButton && pointInRect(x, y, languageButton)) {
+      toggleLanguage();
+      return false;
+    }
+
     const card = modeCards.find((candidate) => pointInRect(x, y, candidate));
 
     if (card) {
@@ -1391,8 +1611,8 @@ function toggleFeedbackMode() {
   } else {
     addImpactEvent({
       type: "banner",
-      label: "完整特效",
-      sublabel: "冲击系统已启动",
+      label: getCopy().impact.fxFull,
+      sublabel: getCopy().impact.impactArmed,
       tint: PALETTE.acid,
       accent: PALETTE.cyan,
       duration: 560,

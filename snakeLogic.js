@@ -28,16 +28,12 @@
     classic: {
       id: "classic",
       number: 1,
-      title: "经典模式",
-      tagline: "原汁原味的贪吃蛇挑战。",
       baseInterval: 125,
       minInterval: 125,
     },
     rush: {
       id: "rush",
       number: 2,
-      title: "霓虹疾行",
-      tagline: "连吃越快，速度越疯。",
       baseInterval: 135,
       minInterval: 70,
       speedStep: 12,
@@ -46,8 +42,6 @@
     maze: {
       id: "maze",
       number: 3,
-      title: "电路迷宫",
-      tagline: "固定电墙挡路，转向要谨慎。",
       baseInterval: 125,
       minInterval: 125,
       wallCount: 22,
@@ -55,8 +49,6 @@
     portal: {
       id: "portal",
       number: 4,
-      title: "传送漂移",
-      tagline: "双向传送门改写路线。",
       baseInterval: 120,
       minInterval: 120,
       relocateEvery: 5,
