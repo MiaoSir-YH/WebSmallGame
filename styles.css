@@ -41,7 +41,7 @@ body::after {
 }
 
 body::before {
-  opacity: 0.22;
+  opacity: 0.16;
   background:
     repeating-linear-gradient(
       0deg,
@@ -54,7 +54,7 @@ body::before {
 }
 
 body::after {
-  opacity: 0.18;
+  opacity: 0.1;
   background:
     linear-gradient(90deg, transparent 0 48%, rgba(255, 43, 214, 0.12) 49%, transparent 50%),
     linear-gradient(0deg, transparent 0 72%, rgba(0, 229, 255, 0.1) 73%, transparent 75%);

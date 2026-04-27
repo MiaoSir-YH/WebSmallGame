@@ -14,6 +14,8 @@ const PALETTE = {
   acidDark: "#5d8f00",
   pink: "#ff2bd6",
   white: "#f2fff5",
+  readable: "#f7ffe8",
+  limeText: "#dfff69",
   amber: "#ffe066",
   violet: "#8f4dff",
 };
@@ -113,7 +115,7 @@ function calculateLayout() {
   const mobileControls = shouldShowTouchControls();
   const landscapeControls = shouldUseSideTouchControls();
   const margin = mobileControls ? 16 : 26;
-  const topReserve = mobileControls ? (landscapeControls ? 108 : 126) : 150;
+  const topReserve = mobileControls ? (landscapeControls ? 138 : 176) : 204;
   const bottomReserve = mobileControls ? getTouchBottomReserve() : 36;
   const sideReserve = landscapeControls ? getTouchSideReserve() : 0;
   const availableWidth = Math.max(220, width - margin * 2 - sideReserve);
@@ -215,65 +217,92 @@ function drawPunkBackdrop(now) {
   pop();
 }
 
+function setNativeTextStyle(align, baseline, style, size) {
+  const canvasBaseline = baseline === "center" ? "middle" : baseline;
+  const fontWeight = style === "normal" ? 600 : 800;
+  drawingContext.textAlign = align || "center";
+  drawingContext.textBaseline = canvasBaseline || "middle";
+  drawingContext.font = `${fontWeight} ${size}px "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Arial, sans-serif`;
+}
+
+function drawNativeText(label, x, y, settings) {
+  const options = settings || {};
+  const value = String(label);
+
+  if (options.stroke !== false) {
+    drawingContext.strokeText(value, x, y);
+  }
+
+  if (options.fill !== false) {
+    drawingContext.fillText(value, x, y);
+  }
+}
+
 function drawNeonText(label, x, y, options) {
   const settings = options || {};
   const size = settings.size || 42;
   const alpha = settings.alpha === undefined ? 1 : settings.alpha;
-  const offset = settings.offset || Math.max(1.5, size * 0.045);
+  const offset = settings.offset || Math.max(1, size * 0.026);
   const glowA = settings.glowA || PALETTE.pink;
   const glowB = settings.glowB || PALETTE.cyan;
   const accent = settings.accent || PALETTE.acid;
-  const primary = settings.primary || PALETTE.white;
-  const outlineWeight = settings.outlineWeight || Math.max(3, size * 0.16);
+  const primary = settings.primary || PALETTE.readable;
+  const outlineWeight = settings.outlineWeight || Math.max(4, size * 0.18);
+  const glowScale = settings.glowScale === undefined ? 0.58 : settings.glowScale;
 
   push();
-  textAlign(settings.align || CENTER, settings.baseline || CENTER);
-  textStyle(settings.style || BOLD);
-  textSize(size);
+  setNativeTextStyle(settings.align || CENTER, settings.baseline || CENTER, settings.style || BOLD, size);
 
-  drawingContext.shadowBlur = size * 0.55;
+  drawingContext.shadowBlur = size * 0.16 * glowScale;
+  drawingContext.shadowColor = PALETTE.ink;
+  stroke(colorWithAlpha(PALETTE.ink, 250 * alpha));
+  strokeWeight(outlineWeight * 1.18);
+  fill(colorWithAlpha(PALETTE.ink, 190 * alpha));
+  drawNativeText(label, x, y);
+
+  drawingContext.shadowBlur = size * 0.34 * glowScale;
   drawingContext.shadowColor = glowB;
-  stroke(colorWithAlpha(glowB, 145 * alpha));
+  stroke(colorWithAlpha(glowB, 96 * alpha));
   strokeWeight(outlineWeight);
-  fill(colorWithAlpha(PALETTE.ink, 55 * alpha));
-  text(label, x, y);
+  fill(colorWithAlpha(PALETTE.ink, 76 * alpha));
+  drawNativeText(label, x, y);
 
-  drawingContext.shadowBlur = size * 0.42;
+  drawingContext.shadowBlur = size * 0.28 * glowScale;
   drawingContext.shadowColor = glowA;
-  stroke(colorWithAlpha(glowA, 170 * alpha));
+  stroke(colorWithAlpha(glowA, 118 * alpha));
   strokeWeight(outlineWeight * 0.66);
-  fill(colorWithAlpha(PALETTE.ink, 38 * alpha));
-  text(label, x, y);
+  fill(colorWithAlpha(PALETTE.ink, 58 * alpha));
+  drawNativeText(label, x, y);
 
-  drawingContext.shadowBlur = size * 0.65;
+  drawingContext.shadowBlur = size * 0.28 * glowScale;
   drawingContext.shadowColor = glowA;
   noStroke();
-  fill(colorWithAlpha(glowA, 120 * alpha));
-  text(label, x - offset, y);
+  fill(colorWithAlpha(glowA, 62 * alpha));
+  drawNativeText(label, x - offset, y, { stroke: false });
 
   drawingContext.shadowColor = glowB;
-  fill(colorWithAlpha(glowB, 130 * alpha));
-  text(label, x + offset, y + offset * 0.35);
+  fill(colorWithAlpha(glowB, 66 * alpha));
+  drawNativeText(label, x + offset, y + offset * 0.35, { stroke: false });
 
-  drawingContext.shadowBlur = size * 0.34;
+  drawingContext.shadowBlur = size * 0.16 * glowScale;
   drawingContext.shadowColor = accent;
-  stroke(colorWithAlpha(accent, 230 * alpha));
-  strokeWeight(settings.strokeWeight || Math.max(2, size * 0.06));
-  fill(colorWithAlpha(primary, 255 * alpha));
-  text(label, x, y);
+  stroke(colorWithAlpha(accent, 188 * alpha));
+  strokeWeight(settings.strokeWeight || Math.max(2.6, size * 0.052));
+  fill(colorWithAlpha(primary, 248 * alpha));
+  drawNativeText(label, x, y);
 
   noStroke();
-  drawingContext.shadowBlur = size * 0.2;
+  drawingContext.shadowBlur = size * 0.06 * glowScale;
   drawingContext.shadowColor = primary;
-  fill(colorWithAlpha(PALETTE.white, 190 * alpha));
-  text(label, x, y - offset * 0.35);
+  fill(colorWithAlpha(PALETTE.white, 116 * alpha));
+  drawNativeText(label, x, y - offset * 0.35, { stroke: false });
   pop();
 }
 
 function drawNeonLogo(label, x, y, size, now, options) {
   const settings = options || {};
   const baseline = settings.baseline || TOP;
-  const flicker = 0.88 + sin(now * 0.009) * 0.08 + sin(now * 0.023) * 0.04;
+  const flicker = 0.94 + sin(now * 0.009) * 0.035 + sin(now * 0.023) * 0.018;
   const lineWidth = Math.min(settings.maxWidth || width * 0.72, size * label.length * 0.58);
   const underlineY = baseline === CENTER ? y + size * 0.62 : y + size * 1.06;
 
@@ -284,21 +313,22 @@ function drawNeonLogo(label, x, y, size, now, options) {
     glowA: PALETTE.pink,
     glowB: PALETTE.cyan,
     accent: PALETTE.acid,
-    primary: PALETTE.white,
-    strokeWeight: settings.strokeWeight || Math.max(1.4, size * 0.04),
-    outlineWeight: settings.outlineWeight || Math.max(4, size * 0.15),
-    offset: settings.offset || Math.max(1.5, size * 0.04),
+    primary: PALETTE.readable,
+    strokeWeight: settings.strokeWeight || Math.max(2.2, size * 0.05),
+    outlineWeight: settings.outlineWeight || Math.max(6, size * 0.2),
+    offset: settings.offset || Math.max(1, size * 0.02),
+    glowScale: settings.glowScale === undefined ? 0.5 : settings.glowScale,
   });
 
   push();
-  drawingContext.shadowBlur = 18;
+  drawingContext.shadowBlur = size * 0.16;
   drawingContext.shadowColor = PALETTE.cyan;
-  stroke(PALETTE.cyan);
+  stroke(colorWithAlpha(PALETTE.cyan, 185));
   strokeWeight(Math.max(1, size * 0.035));
   line(x - lineWidth / 2, underlineY, x + lineWidth / 2, underlineY);
 
   drawingContext.shadowColor = PALETTE.pink;
-  stroke(PALETTE.pink);
+  stroke(colorWithAlpha(PALETTE.pink, 165));
   strokeWeight(Math.max(1, size * 0.02));
   line(x - lineWidth * 0.36, underlineY + 5, x + lineWidth * 0.36, underlineY + 5);
 
@@ -309,27 +339,49 @@ function drawNeonLogo(label, x, y, size, now, options) {
   pop();
 }
 
+function drawReadableText(label, x, y, options) {
+  const settings = options || {};
+  const size = settings.size || 20;
+  const primary = settings.primary || PALETTE.limeText;
+  const glow = settings.glow || PALETTE.cyan;
+  const alpha = settings.alpha === undefined ? 1 : settings.alpha;
+
+  push();
+  setNativeTextStyle(settings.align || CENTER, settings.baseline || TOP, settings.style || BOLD, size);
+  drawingContext.shadowBlur = settings.glowBlur === undefined ? Math.max(4, size * 0.16) : settings.glowBlur;
+  drawingContext.shadowColor = glow;
+  stroke(colorWithAlpha(PALETTE.ink, 250 * alpha));
+  strokeWeight(settings.outlineWeight || Math.max(2.4, size * 0.16));
+  fill(colorWithAlpha(primary, 238 * alpha));
+  drawNativeText(label, x, y);
+
+  drawingContext.shadowBlur = 0;
+  stroke(colorWithAlpha(PALETTE.ink, 190 * alpha));
+  strokeWeight(Math.max(1, size * 0.055));
+  fill(colorWithAlpha(primary, 248 * alpha));
+  drawNativeText(label, x, y);
+  pop();
+}
+
 function drawModeSelect(now) {
   modeCards = [];
   languageButton = null;
   touchControls = [];
-  const titleY = clamp(height * 0.048, 18, 38);
-  const titleSize = clamp(width * 0.068, 42, 84);
+  const titleY = clamp(height * 0.034, 14, 30);
+  const titleSize = clamp(width * 0.052, 58, 92);
 
   drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
     baseline: TOP,
-    maxWidth: width * 0.76,
+    maxWidth: width * 0.82,
+    glowScale: 0.46,
   });
 
-  push();
-  textAlign(CENTER, TOP);
-  drawingContext.shadowColor = PALETTE.cyan;
-  drawingContext.shadowBlur = 14;
-  fill(PALETTE.acid);
-  textStyle(NORMAL);
-  textSize(clamp(width * 0.02, 13, 18));
-  text(getCopy().appSubtitle, width / 2, titleY + titleSize + 16);
-  pop();
+  drawReadableText(getCopy().appSubtitle, width / 2, titleY + titleSize + 22, {
+    size: clamp(width * 0.016, 18, 26),
+    style: BOLD,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
 
   drawLanguageButton();
 
@@ -343,7 +395,7 @@ function drawModeSelect(now) {
   const totalW = cardW * columns + gap * (columns - 1);
   const totalH = cardH * rows + gap * (rows - 1);
   const startX = (width - totalW) / 2;
-  const startY = Math.max(118, Math.min(height - totalH - 24, height * 0.24));
+  const startY = Math.max(titleY + titleSize + 76, Math.min(height - totalH - 24, height * 0.29));
 
   SnakeLogic.MODE_SEQUENCE.forEach((modeId, index) => {
     const config = SnakeLogic.getModeConfig(modeId);
@@ -376,17 +428,17 @@ function drawModeSelect(now) {
     text(`0${config.number}`, x + 18, y + 16);
 
     fill(PALETTE.white);
-    textSize(compact ? 20 : 24);
+    textSize(compact ? 22 : 28);
     text(modeCopy.title, x + 58, y + 13);
 
     textStyle(NORMAL);
     fill(PALETTE.acid);
-    textSize(compact ? 12 : 14);
-    text(modeCopy.tagline, x + 18, y + (compact ? 48 : 58), cardW - 36, 42);
+    textSize(compact ? 13 : 16);
+    text(modeCopy.tagline, x + 18, y + (compact ? 50 : 60), cardW - 36, 42);
 
     fill(PALETTE.cyan);
-    textSize(11);
-    text(getModeHint(modeId), x + 18, y + cardH - 25, cardW - 36, 18);
+    textSize(compact ? 12 : 13);
+    text(getModeHint(modeId), x + 18, y + cardH - 27, cardW - 36, 18);
     pop();
   });
 }
@@ -425,34 +477,47 @@ function drawLanguageButton() {
 
 function drawHeader(now) {
   const scoreLabel = String(game.score).padStart(4, "0");
-  const compact = width < 640;
+  const compact = width < 720 || shouldShowTouchControls();
   const pulse = getScorePulse(now);
   const copy = getCopy();
   const modeCopy = getModeCopy(game.modeId);
-  const titleSize = clamp(width * 0.045, 32, 54) + pulse * 4;
+  const titleTop = compact ? 10 : 14;
+  const titleSize = (compact ? clamp(Math.min(width, height) * 0.13, 46, 60) : clamp(width * 0.04, 64, 78)) + pulse * 4;
+  const lineSize = compact ? clamp(Math.min(width, height) * 0.04, 18, 22) : clamp(width * 0.013, 22, 26);
+  const firstLineY = titleTop + titleSize + (compact ? 20 : 28);
+  const secondLineY = firstLineY + lineSize + (compact ? 10 : 12);
 
   push();
-  drawNeonLogo("WebSmallGame", width / 2 + 2, compact ? 8 : 14, titleSize, now, {
+  drawNeonLogo("WebSmallGame", width / 2 + 2, titleTop, titleSize, now, {
     baseline: TOP,
-    maxWidth: width * 0.6,
-    outlineWeight: Math.max(4, titleSize * 0.17),
-    offset: Math.max(1.2, titleSize * 0.032),
+    maxWidth: compact ? width * 0.82 : width * 0.74,
+    outlineWeight: Math.max(8, titleSize * 0.22),
+    offset: Math.max(1, titleSize * 0.018),
+    glowScale: 0.36,
   });
 
-  textAlign(CENTER, TOP);
-  drawingContext.shadowColor = PALETTE.cyan;
-  drawingContext.shadowBlur = 10 + pulse * 18;
-  fill(pulse > 0 ? PALETTE.amber : PALETTE.acid);
-  textStyle(NORMAL);
-
   if (compact) {
-    textSize(15);
-    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, 66);
-    text(`${getModeStatus()}  |  ${getFeedbackStatus()}`, width / 2, 88);
+    drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, firstLineY, {
+      size: lineSize,
+      primary: pulse > 0 ? PALETTE.amber : PALETTE.limeText,
+      glow: PALETTE.cyan,
+    });
+    drawReadableText(`${getModeStatus()}  |  ${getFeedbackStatus()}`, width / 2, secondLineY, {
+      size: Math.max(17, lineSize - 2),
+      primary: PALETTE.limeText,
+      glow: PALETTE.pink,
+    });
   } else {
-    textSize(clamp(width * 0.018, 15, 22));
-    text(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2, 76);
-    text(`${getFeedbackStatus()}  |  ${copy.modeShortcut}  |  ${copy.resetShortcut}  |  ${copy.languageShortcut}`, width / 2, 102);
+    drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2, firstLineY, {
+      size: lineSize,
+      primary: pulse > 0 ? PALETTE.amber : PALETTE.limeText,
+      glow: PALETTE.cyan,
+    });
+    drawReadableText(`${getFeedbackStatus()}  |  ${copy.modeShortcut}  |  ${copy.resetShortcut}  |  ${copy.languageShortcut}`, width / 2, secondLineY, {
+      size: Math.max(21, lineSize - 2),
+      primary: PALETTE.limeText,
+      glow: PALETTE.pink,
+    });
   }
 
   pop();
@@ -1315,17 +1380,17 @@ function drawStateOverlay() {
   const scoreLine = paused ? overlay.progressSaved : formatCopy(overlay.finalScore, { score: scoreLabel });
   const actionLine = paused ? overlay.resume : overlay.restart;
   const modeLine = overlay.backToModes;
-  const titleSize = clamp(board.w * 0.17, 46, 92);
+  const titleSize = clamp(board.w * 0.18, 72, 120);
 
   push();
   noStroke();
-  fill(5, 6, 12, 190);
+  fill(5, 6, 12, 218);
   rect(board.x, board.y, board.w, board.h);
 
   const titleGlow = paused ? PALETTE.cyan : game.status === "won" ? PALETTE.acid : PALETTE.pink;
   const titleAccent = paused ? PALETTE.acid : game.status === "won" ? PALETTE.cyan : PALETTE.acid;
   const centerY = board.y + board.h / 2;
-  const titleY = centerY - titleSize * 0.82;
+  const titleY = centerY - titleSize * 0.78;
 
   drawNeonText(title, board.x + board.w / 2, titleY, {
     size: titleSize,
@@ -1333,22 +1398,36 @@ function drawStateOverlay() {
     glowA: titleGlow,
     glowB: PALETTE.cyan,
     accent: titleAccent,
-    primary: PALETTE.white,
-    outlineWeight: Math.max(6, titleSize * 0.18),
-    strokeWeight: Math.max(2.4, titleSize * 0.065),
-    offset: Math.max(2, titleSize * 0.055),
+    primary: PALETTE.readable,
+    outlineWeight: Math.max(10, titleSize * 0.24),
+    strokeWeight: Math.max(3, titleSize * 0.056),
+    offset: Math.max(1.4, titleSize * 0.02),
+    glowScale: 0.36,
   });
 
-  drawingContext.shadowBlur = 10;
-  drawingContext.shadowColor = PALETTE.acid;
-  textAlign(CENTER, CENTER);
-  textStyle(NORMAL);
-  fill(PALETTE.acid);
-  textSize(clamp(board.w * 0.046, 18, 30));
-  text(scoreLine, board.x + board.w / 2, centerY + titleSize * 0.18);
-  textSize(clamp(board.w * 0.036, 15, 24));
-  text(actionLine, board.x + board.w / 2, centerY + titleSize * 0.56);
-  text(modeLine, board.x + board.w / 2, centerY + titleSize * 0.86);
+  rectMode(CENTER);
+  noStroke();
+  fill(5, 6, 12, 150);
+  rect(board.x + board.w / 2, centerY + titleSize * 0.5, board.w * 0.7, titleSize * 0.92, 8);
+
+  drawReadableText(scoreLine, board.x + board.w / 2, centerY + titleSize * 0.16, {
+    size: clamp(board.w * 0.048, 24, 34),
+    baseline: CENTER,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
+  drawReadableText(actionLine, board.x + board.w / 2, centerY + titleSize * 0.52, {
+    size: clamp(board.w * 0.04, 22, 30),
+    baseline: CENTER,
+    primary: PALETTE.limeText,
+    glow: PALETTE.pink,
+  });
+  drawReadableText(modeLine, board.x + board.w / 2, centerY + titleSize * 0.82, {
+    size: clamp(board.w * 0.036, 20, 28),
+    baseline: CENTER,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
   pop();
 }
 
