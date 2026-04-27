@@ -155,7 +155,7 @@ function drawModeSelect(now) {
   fill(PALETTE.acid);
   textStyle(NORMAL);
   textSize(clamp(width * 0.02, 13, 18));
-  text("选择模式  |  按 1-4", width / 2, clamp(height * 0.055, 18, 44) + 62);
+  text("霓虹贪吃蛇  |  选择模式  |  按 1-4", width / 2, clamp(height * 0.055, 18, 44) + 62);
   pop();
 
   const compact = width < 760;
@@ -217,18 +217,18 @@ function drawModeSelect(now) {
 
 function getModeHint(modeId) {
   if (modeId === "rush") {
-    return "连击计分 / 速度提升";
+    return "连击加分 / 逐步加速";
   }
 
   if (modeId === "maze") {
-    return "避开固定电墙";
+    return "固定电墙 / 小心绕行";
   }
 
   if (modeId === "portal") {
     return "每 5 个食物迁移传送门";
   }
 
-  return "原始循环玩法";
+  return "稳定节奏 / 专注走位";
 }
 
 function drawHeader(now) {
@@ -1103,8 +1103,11 @@ function drawStateOverlay() {
     return;
   }
 
+  const scoreLabel = String(game.score).padStart(4, "0");
   const title = paused ? "已暂停" : game.status === "won" ? "棋盘已清空" : "游戏结束";
-  const detail = paused ? "空格 / P 继续  |  M 模式" : "R / 回车 / 点击 重开  |  M 模式";
+  const scoreLine = paused ? "当前进度已保留" : `最终分数 ${scoreLabel}`;
+  const actionLine = paused ? "空格 / P 继续" : "R / 回车 / 点击重开";
+  const modeLine = "M 返回模式选择";
 
   push();
   noStroke();
@@ -1117,14 +1120,17 @@ function drawStateOverlay() {
   textStyle(BOLD);
   fill(paused ? PALETTE.cyan : PALETTE.pink);
   textSize(clamp(board.w * 0.12, 30, 58));
-  text(title, board.x + board.w / 2, board.y + board.h / 2 - 18);
+  text(title, board.x + board.w / 2, board.y + board.h / 2 - 44);
 
   drawingContext.shadowBlur = 10;
   drawingContext.shadowColor = PALETTE.acid;
   textStyle(NORMAL);
   fill(PALETTE.acid);
-  textSize(clamp(board.w * 0.036, 12, 18));
-  text(detail, board.x + board.w / 2, board.y + board.h / 2 + 34);
+  textSize(clamp(board.w * 0.038, 12, 18));
+  text(scoreLine, board.x + board.w / 2, board.y + board.h / 2 + 8);
+  textSize(clamp(board.w * 0.032, 11, 16));
+  text(actionLine, board.x + board.w / 2, board.y + board.h / 2 + 36);
+  text(modeLine, board.x + board.w / 2, board.y + board.h / 2 + 60);
   pop();
 }
 
