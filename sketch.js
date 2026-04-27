@@ -24,13 +24,17 @@ const I18N = globalThis.WebSmallGameI18N;
 const DEFAULT_LANGUAGE = I18N.defaultLanguage;
 const COPY = I18N.copy;
 const Progression = globalThis.WebSmallGameProgression || null;
+const GAME_CATALOG = globalThis.WebSmallGameCatalog || [{ id: "snake", number: 1, enabled: true }];
 
 let game;
 let board;
-let screen = "select";
+let screen = "home";
+let activeGameId = null;
+let gameCards = [];
 let activeModeId = "classic";
 let modeCards = [];
 let languageButton = null;
+let homeBackButton = null;
 let settingsButton = null;
 let settingsLanguageButton = null;
 let moreModesButton = null;
@@ -108,6 +112,16 @@ function getCopy() {
 function getModeCopy(modeId) {
   const copy = getCopy();
   return copy.modes[modeId] || copy.modes.classic;
+}
+
+function getGameCopy(gameId) {
+  const copy = getCopy();
+  return (copy.games && copy.games[gameId]) || {
+    title: gameId,
+    tagline: "",
+    meta: "",
+    hint: "",
+  };
 }
 
 function formatCopy(template, values) {
@@ -221,6 +235,12 @@ function getTouchBottomReserve() {
 function renderScene(now) {
   background(PALETTE.ink);
   drawPunkBackdrop(now);
+
+  if (screen === "home") {
+    drawGamePortal(now);
+    drawProgressionToasts(now);
+    return;
+  }
 
   if (screen === "select") {
     drawModeSelect(now);
@@ -445,9 +465,161 @@ function getFittedTextSize(label, maxWidth, preferredSize, minSize) {
   return size;
 }
 
-function drawModeSelect(now) {
+function drawGamePortal(now) {
+  gameCards = [];
   modeCards = [];
   languageButton = null;
+  homeBackButton = null;
+  settingsButton = null;
+  settingsLanguageButton = null;
+  moreModesButton = null;
+  progressionArchiveButton = null;
+  dailyChallengeCard = null;
+  archiveBackButton = null;
+  mobileModeButton = null;
+  touchControls = [];
+
+  const compact = width < 760 || shouldUseTouchLayout();
+  const titleY = compact ? 16 : clamp(height * 0.04, 18, 34);
+  const titleSize = compact ? clamp(width * 0.098, 34, 48) : clamp(width * 0.058, 64, 104);
+  const copy = getCopy();
+
+  drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
+    baseline: TOP,
+    maxWidth: width * 0.84,
+    glowScale: 0.42,
+  });
+
+  drawReadableText(copy.homeSubtitle, width / 2, titleY + titleSize + (compact ? 20 : 26), {
+    size: compact ? clamp(width * 0.034, 13, 17) : clamp(width * 0.018, 20, 30),
+    style: BOLD,
+    primary: PALETTE.limeText,
+    glow: PALETTE.cyan,
+  });
+
+  drawLanguageButton({
+    x: width - (compact ? 58 : 74) - (compact ? 14 : 26),
+    y: compact ? 18 : 26,
+    w: compact ? 58 : 74,
+    h: compact ? 30 : 34,
+  });
+
+  const gap = compact ? 12 : 18;
+  const margin = compact ? 20 : 34;
+  const columns = compact ? 1 : Math.min(2, Math.max(1, GAME_CATALOG.length));
+  const totalW = Math.min(compact ? 440 : 860, width - margin * 2);
+  const cardW = columns === 1 ? totalW : (totalW - gap * (columns - 1)) / columns;
+  const cardH = compact ? 136 : 176;
+  const startX = (width - totalW) / 2;
+  const startY = Math.max(
+    titleY + titleSize + (compact ? 72 : 100),
+    Math.min(height * (compact ? 0.24 : 0.3), height - cardH - (compact ? 18 : 28)),
+  );
+
+  GAME_CATALOG.forEach((gameInfo, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const x = startX + col * (cardW + gap);
+    const y = startY + row * (cardH + gap);
+    drawGamePortalCard(gameInfo, x, y, cardW, cardH, compact, now);
+  });
+}
+
+function drawGamePortalCard(gameInfo, x, y, cardW, cardH, compact, now) {
+  const gameCopy = getGameCopy(gameInfo.id);
+  const enabled = gameInfo.enabled !== false;
+  const pulse = enabled ? 0.5 + sin(now * 0.007) * 0.18 : 0;
+
+  gameCards.push({ gameId: gameInfo.id, x, y, w: cardW, h: cardH, enabled });
+
+  push();
+  drawingContext.shadowBlur = enabled ? 20 + pulse * 10 : 8;
+  drawingContext.shadowColor = enabled ? PALETTE.acid : PALETTE.cyan;
+  stroke(enabled ? PALETTE.acid : colorWithAlpha(PALETTE.cyan, 90));
+  strokeWeight(enabled ? 2.4 : 1.4);
+  fill(6, 11, 22, enabled ? 228 : 176);
+  rect(x, y, cardW, cardH, 7);
+
+  noStroke();
+  fill(255, 43, 214, enabled ? 70 + pulse * 70 : 40);
+  rect(x, y, 6, cardH);
+
+  textAlign(LEFT, TOP);
+  textStyle(BOLD);
+  textSize(compact ? 13 : 15);
+  fill(PALETTE.pink);
+  text(String(gameInfo.number || 0).padStart(2, "0"), x + 18, y + 18);
+
+  fill(PALETTE.white);
+  textSize(compact ? 24 : 32);
+  text(gameCopy.title, x + 58, y + (compact ? 15 : 16), cardW - 76, 38);
+
+  textStyle(NORMAL);
+  fill(PALETTE.limeText);
+  textSize(compact ? 13 : 16);
+  text(gameCopy.tagline, x + 18, y + (compact ? 58 : 68), cardW - (compact ? 36 : 190), 44);
+
+  fill(PALETTE.cyan);
+  textSize(compact ? 12 : 14);
+  text(gameCopy.meta, x + 18, y + cardH - (compact ? 44 : 52), cardW - 36, 22);
+
+  fill(PALETTE.acid);
+  textStyle(BOLD);
+  textSize(compact ? 12 : 14);
+  text(gameCopy.hint, x + 18, y + cardH - (compact ? 24 : 28), cardW - 36, 20);
+
+  if (!compact) {
+    drawSnakePortalPreview(x + cardW - 132, y + 42, 86, now);
+  }
+
+  pop();
+}
+
+function drawSnakePortalPreview(x, y, size, now) {
+  const cell = size / 6;
+
+  push();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(colorWithAlpha(PALETTE.cyan, 130));
+  strokeWeight(1.2);
+  fill(5, 6, 12, 170);
+  rect(x, y, size, size, 6);
+
+  stroke(colorWithAlpha(PALETTE.cyan, 32));
+  strokeWeight(1);
+  for (let i = 1; i < 6; i += 1) {
+    line(x + i * cell, y, x + i * cell, y + size);
+    line(x, y + i * cell, x + size, y + i * cell);
+  }
+
+  noStroke();
+  const snake = [
+    { x: 1, y: 3 },
+    { x: 2, y: 3 },
+    { x: 3, y: 3 },
+    { x: 3, y: 2 },
+  ];
+
+  snake.forEach((segment, index) => {
+    drawingContext.shadowBlur = index === snake.length - 1 ? 18 : 10;
+    drawingContext.shadowColor = PALETTE.acid;
+    fill(index === snake.length - 1 ? PALETTE.acid : colorWithAlpha(PALETTE.acid, 168));
+    rect(x + segment.x * cell + 2, y + segment.y * cell + 2, cell - 4, cell - 4, 3);
+  });
+
+  drawingContext.shadowBlur = 18 + sin(now * 0.01) * 4;
+  drawingContext.shadowColor = PALETTE.pink;
+  fill(PALETTE.pink);
+  rect(x + 4.4 * cell, y + 1.2 * cell, cell * 0.52, cell * 0.52, 3);
+  pop();
+}
+
+function drawModeSelect(now) {
+  gameCards = [];
+  modeCards = [];
+  languageButton = null;
+  homeBackButton = null;
   settingsButton = null;
   settingsLanguageButton = null;
   moreModesButton = null;
@@ -462,8 +634,9 @@ function drawModeSelect(now) {
   const titleY = compact ? 12 : clamp(height * 0.034, 14, 30);
   const titleSize = compact ? clamp(width * 0.09, 32, 42) : clamp(width * 0.052, 58, 92);
   const copy = getCopy();
+  const snakeCopy = getGameCopy("snake");
 
-  drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
+  drawNeonLogo(snakeCopy.title, width / 2, titleY, titleSize, now, {
     baseline: TOP,
     maxWidth: width * 0.82,
     glowScale: 0.46,
@@ -475,6 +648,8 @@ function drawModeSelect(now) {
     primary: PALETTE.limeText,
     glow: PALETTE.cyan,
   });
+
+  drawHomeBackButton(copy, compact);
 
   const columns = compact ? 1 : 2;
   const gap = compact ? 12 : 18;
@@ -710,6 +885,7 @@ function drawDailyChallengeSelectCard(bounds, challenge, summary, copy, now) {
 function drawProgressionArchive(now) {
   modeCards = [];
   languageButton = null;
+  homeBackButton = null;
   progressionArchiveButton = null;
   dailyChallengeCard = null;
   mobileModeButton = null;
@@ -872,14 +1048,40 @@ function drawSettingsPanel(bounds, copy, compact) {
   pop();
 }
 
-function drawLanguageButton() {
-  const compact = width < 640;
-  const label = getCopy().languageButton;
-  const buttonW = compact ? 58 : 74;
+function drawHomeBackButton(copy, compact) {
+  const buttonW = compact ? 66 : 86;
   const buttonH = compact ? 30 : 34;
   const margin = compact ? 14 : 26;
-  const x = width - buttonW - margin;
-  const y = compact ? 82 : 26;
+  const x = margin;
+  const y = compact ? 18 : 26;
+  const label = copy.backHomeButton;
+
+  homeBackButton = { x, y, w: buttonW, h: buttonH };
+
+  push();
+  drawingContext.shadowBlur = 12;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.cyan);
+  strokeWeight(1.4);
+  fill(6, 11, 22, 220);
+  rect(x, y, buttonW, buttonH, 5);
+  noStroke();
+  fill(PALETTE.acid);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  textSize(compact ? 12 : 13);
+  text(label, x + buttonW / 2, y + buttonH / 2 + 0.5);
+  pop();
+}
+
+function drawLanguageButton(bounds) {
+  const compact = width < 640;
+  const label = getCopy().languageButton;
+  const buttonW = bounds ? bounds.w : compact ? 58 : 74;
+  const buttonH = bounds ? bounds.h : compact ? 30 : 34;
+  const margin = compact ? 14 : 26;
+  const x = bounds ? bounds.x : width - buttonW - margin;
+  const y = bounds ? bounds.y : compact ? 82 : 26;
 
   languageButton = { x, y, w: buttonW, h: buttonH };
 
@@ -915,7 +1117,7 @@ function drawHeader(now) {
   const secondLineY = firstLineY + lineSize + (compact ? 6 : 12);
 
   push();
-  drawNeonLogo("WebSmallGame", width / 2 + 2, titleTop, titleSize, now, {
+  drawNeonLogo(getGameCopy("snake").title, width / 2 + 2, titleTop, titleSize, now, {
     baseline: TOP,
     maxWidth: compact ? width * 0.82 : width * 0.74,
     outlineWeight: Math.max(8, titleSize * 0.22),
@@ -2163,13 +2365,33 @@ function keyPressed() {
     return false;
   }
 
-  if (keyName === "m") {
+  if (keyName === "m" && screen === "playing") {
     returnToModeSelect();
     return false;
   }
 
+  if (keyName === "h" && (screen === "select" || screen === "achievements")) {
+    returnToHome();
+    return false;
+  }
+
+  if (screen === "home") {
+    const selectedGame = getGameIdFromNumber(keyName);
+
+    if (selectedGame) {
+      enterGame(selectedGame);
+      return false;
+    }
+
+    if (keyCode === ENTER && GAME_CATALOG.length > 0) {
+      enterGame(GAME_CATALOG[0].id);
+    }
+
+    return false;
+  }
+
   if (screen === "achievements") {
-    if (keyName === "a" || keyCode === ESCAPE) {
+    if (keyName === "a" || keyName === "m" || keyCode === ESCAPE) {
       returnToModeSelect();
     }
 
@@ -2226,6 +2448,17 @@ function getModeIdFromNumber(value) {
   return SnakeLogic.MODE_SEQUENCE.find((modeId) => SnakeLogic.getModeConfig(modeId).number === numeric) || null;
 }
 
+function getGameIdFromNumber(value) {
+  const numeric = Number(value);
+
+  if (!Number.isInteger(numeric)) {
+    return null;
+  }
+
+  const gameInfo = GAME_CATALOG.find((candidate) => candidate.number === numeric && candidate.enabled !== false);
+  return gameInfo ? gameInfo.id : null;
+}
+
 function directionFromKey() {
   if (keyCode === UP_ARROW || String(key).toLowerCase() === "w") {
     return "up";
@@ -2278,6 +2511,21 @@ function touchEnded(event) {
 function handlePointer(x, y) {
   unlockAudio();
 
+  if (screen === "home") {
+    if (languageButton && pointInRect(x, y, languageButton)) {
+      toggleLanguage();
+      return false;
+    }
+
+    const selectedGame = gameCards.find((candidate) => candidate.enabled && pointInRect(x, y, candidate));
+
+    if (selectedGame) {
+      enterGame(selectedGame.gameId);
+    }
+
+    return false;
+  }
+
   if (screen === "achievements") {
     if (archiveBackButton && pointInRect(x, y, archiveBackButton)) {
       returnToModeSelect();
@@ -2287,6 +2535,11 @@ function handlePointer(x, y) {
   }
 
   if (screen === "select") {
+    if (homeBackButton && pointInRect(x, y, homeBackButton)) {
+      returnToHome();
+      return false;
+    }
+
     if (settingsButton && pointInRect(x, y, settingsButton)) {
       settingsExpanded = !settingsExpanded;
       playModeSound();
@@ -2444,9 +2697,24 @@ function getDistanceSquared(x, y, control) {
   return dx * dx + dy * dy;
 }
 
+function enterGame(gameId) {
+  if (gameId !== "snake") {
+    return;
+  }
+
+  activeGameId = gameId;
+  screen = "select";
+  paused = false;
+  currentRun = null;
+  activeDailyChallenge = null;
+  clearFeedback();
+  playModeSound();
+}
+
 function startMode(modeId, options) {
   const settings = options || {};
   const dailyChallenge = settings.dailyChallenge || null;
+  activeGameId = "snake";
   activeModeId = SnakeLogic.getModeConfig(modeId).id;
   activeDailyChallenge = dailyChallenge;
   game = SnakeLogic.createGame({
@@ -2494,6 +2762,7 @@ function openProgressionArchive() {
     return;
   }
 
+  activeGameId = "snake";
   screen = "achievements";
   paused = false;
   clearFeedback();
@@ -2501,11 +2770,24 @@ function openProgressionArchive() {
 }
 
 function returnToModeSelect() {
+  activeGameId = "snake";
   screen = "select";
   paused = false;
   currentRun = null;
   activeDailyChallenge = null;
   clearFeedback();
+}
+
+function returnToHome() {
+  screen = "home";
+  activeGameId = null;
+  paused = false;
+  currentRun = null;
+  activeDailyChallenge = null;
+  settingsExpanded = false;
+  moreModesExpanded = false;
+  clearFeedback();
+  playModeSound();
 }
 
 function togglePause() {
