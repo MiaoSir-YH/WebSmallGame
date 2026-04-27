@@ -5,6 +5,8 @@ const MOBILE_CONTROL_SHORT_EDGE = 820;
 const MOBILE_CONTROL_LONG_EDGE = 1180;
 const SWIPE_MIN_DISTANCE = 22;
 const SWIPE_DOMINANCE = 1.16;
+const SCORE_ROLL_MIN_MS = 460;
+const SCORE_ROLL_MAX_MS = 1280;
 
 const PALETTE = {
   ink: "#05060c",
@@ -55,6 +57,10 @@ let lastStepAt = 0;
 let lastTouchAt = 0;
 let gameOverFlashUntil = 0;
 let scorePulseUntil = 0;
+let scoreRolls = {
+  snake: createScoreRoll(0),
+  mini: createScoreRoll(0),
+};
 let eatFeedbacks = [];
 let teleportFeedbacks = [];
 let impactEvents = [];
@@ -80,6 +86,8 @@ function setup() {
   refreshProgressionSummary();
   ensureDailyChallenge();
   game = SnakeLogic.createGame({ cols: GRID_COLS, rows: GRID_ROWS, modeId: activeModeId });
+  resetScoreRoll("snake", game.score || 0);
+  resetScoreRoll("mini", 0);
   calculateLayout();
 }
 
@@ -318,7 +326,7 @@ function renderScene(now) {
   drawEatFeedback(now);
   drawTeleportFeedback(now);
   drawImpactEvents(now);
-  drawStateOverlay();
+  drawStateOverlay(now);
   drawTouchControls();
   pop();
 
@@ -1291,10 +1299,11 @@ function drawLanguageButton(bounds) {
 
 function drawHeader(now) {
   mobileModeButton = null;
-  const scoreLabel = String(game.score).padStart(4, "0");
+  const scoreLabel = formatRollingScore("snake", game.score || 0, now);
   const touchLayout = shouldUseTouchLayout();
   const compact = width < 720 || touchLayout;
-  const pulse = getScorePulse(now);
+  const pulse = getScorePulse(now, "snake");
+  const scoreJitter = getScoreRollJitter("snake", now);
   const copy = getCopy();
   const modeCopy = getModeCopy(game.modeId);
   const titleTop = compact ? 8 : 14;
@@ -1313,7 +1322,7 @@ function drawHeader(now) {
   });
 
   if (compact) {
-    drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, firstLineY, {
+    drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2 + scoreJitter.x, firstLineY + scoreJitter.y, {
       size: lineSize,
       primary: pulse > 0 ? PALETTE.amber : PALETTE.limeText,
       glow: PALETTE.cyan,
@@ -1324,7 +1333,7 @@ function drawHeader(now) {
       glow: PALETTE.pink,
     });
   } else {
-    drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2, firstLineY, {
+    drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}  |  ${getModeStatus()}`, width / 2 + scoreJitter.x, firstLineY + scoreJitter.y, {
       size: lineSize,
       primary: pulse > 0 ? PALETTE.amber : PALETTE.limeText,
       glow: PALETTE.cyan,
@@ -1417,7 +1426,9 @@ function drawMiniGameScene(now) {
   const miniCopy = env.copy;
   const titleY = compact ? 10 : 18;
   const titleSize = compact ? clamp(width * 0.083, 30, 42) : clamp(width * 0.045, 54, 78);
-  const scoreLabel = String(activeMiniGameState.score || 0).padStart(4, "0");
+  const scoreLabel = formatRollingScore("mini", activeMiniGameState.score || 0, now);
+  const scorePulse = getScorePulse(now, "mini");
+  const scoreJitter = getScoreRollJitter("mini", now);
   const status = miniCopy.status || gameCopy.tagline;
 
   drawHomeBackButton(copy, compact);
@@ -1436,10 +1447,10 @@ function drawMiniGameScene(now) {
     glowScale: 0.38,
   });
 
-  drawFittedReadableText(`${miniCopy.score} ${scoreLabel}  |  ${status}`, width / 2, titleY + titleSize + (compact ? 16 : 26), width * 0.9, {
+  drawFittedReadableText(`${miniCopy.score} ${scoreLabel}  |  ${status}`, width / 2 + scoreJitter.x, titleY + titleSize + (compact ? 16 : 26) + scoreJitter.y, width * 0.9, {
     size: compact ? 16 : 23,
     minSize: compact ? 11 : 15,
-    primary: PALETTE.limeText,
+    primary: scorePulse > 0 ? PALETTE.amber : PALETTE.limeText,
     glow: PALETTE.cyan,
   });
 
@@ -1465,7 +1476,7 @@ function drawMiniGameOverlay(state, env, now) {
   const title = state.status === "won" ? copy.won : copy.gameover;
   const titleSize = clamp(area.w * 0.14, env.compact ? 48 : 72, env.compact ? 78 : 112);
   const centerY = area.y + area.h / 2;
-  const scoreLine = formatCopy(copy.finalScore, { score: String(state.score || 0).padStart(4, "0") });
+  const scoreLine = formatCopy(copy.finalScore, { score: formatRollingScore("mini", state.score || 0, now) });
 
   push();
   noStroke();
@@ -1941,7 +1952,7 @@ function getFeedbackStatus() {
 
 function drawBoardFrame(now) {
   const jitter = game.status === "gameover" ? sin(now * 0.08) * 3 : 0;
-  const pulse = getScorePulse(now);
+  const pulse = getScorePulse(now, "snake");
 
   push();
   drawingContext.shadowBlur = 24 + pulse * 14;
@@ -2942,7 +2953,7 @@ function drawPortalPulse(cell, progress, alpha, tint) {
   line(cx, cy - size * 0.35, cx, cy + size * 0.35);
 }
 
-function drawStateOverlay() {
+function drawStateOverlay(now) {
   mobileModeButton = null;
 
   if (game.status === "running" && !paused) {
@@ -2951,7 +2962,7 @@ function drawStateOverlay() {
 
   const copy = getCopy();
   const overlay = copy.overlay;
-  const scoreLabel = String(game.score).padStart(4, "0");
+  const scoreLabel = formatRollingScore("snake", game.score || 0, now);
   const title = paused ? overlay.paused : game.status === "won" ? overlay.won : overlay.gameover;
   const scoreLine = paused ? overlay.progressSaved : formatCopy(overlay.finalScore, { score: scoreLabel });
   const actionLine = paused ? overlay.resume : overlay.restart;
@@ -3105,12 +3116,107 @@ function drawFlash(now) {
   pop();
 }
 
-function getScorePulse(now) {
-  if (now >= scorePulseUntil) {
+function createScoreRoll(value) {
+  const initialValue = Number(value) || 0;
+
+  return {
+    value: initialValue,
+    target: initialValue,
+    startedAt: 0,
+    rollingUntil: 0,
+    lastNow: 0,
+  };
+}
+
+function resetScoreRoll(channel, value) {
+  const roll = scoreRolls[channel];
+
+  if (!roll) {
+    return;
+  }
+
+  const nextValue = Math.max(0, Number(value) || 0);
+  roll.value = nextValue;
+  roll.target = nextValue;
+  roll.startedAt = 0;
+  roll.rollingUntil = 0;
+  roll.lastNow = 0;
+}
+
+function formatRollingScore(channel, target, now) {
+  const roll = scoreRolls[channel] || scoreRolls.snake;
+  updateScoreRoll(roll, target, now);
+  return String(Math.floor(roll.value)).padStart(4, "0");
+}
+
+function updateScoreRoll(roll, target, now) {
+  const nextTarget = Math.max(0, Number(target) || 0);
+
+  if (nextTarget < roll.target || nextTarget < roll.value) {
+    roll.value = nextTarget;
+    roll.target = nextTarget;
+    roll.startedAt = 0;
+    roll.rollingUntil = 0;
+    roll.lastNow = now;
+    return;
+  }
+
+  if (nextTarget !== roll.target) {
+    const gain = Math.max(1, nextTarget - roll.value);
+    roll.target = nextTarget;
+    roll.startedAt = now;
+    roll.rollingUntil = now + clamp(SCORE_ROLL_MIN_MS + gain * 18, SCORE_ROLL_MIN_MS, SCORE_ROLL_MAX_MS);
+  }
+
+  const diff = roll.target - roll.value;
+  const dt = roll.lastNow ? clamp(now - roll.lastNow, 0, 80) : 16;
+  roll.lastNow = now;
+
+  if (diff <= 0.01) {
+    roll.value = roll.target;
+    return;
+  }
+
+  const remaining = Math.max(90, roll.rollingUntil - now);
+  const reelKick = now < roll.rollingUntil
+    ? 0.82 + Math.abs(sin((now - roll.startedAt) * 0.075)) * 0.42
+    : 1;
+  const smoothStep = diff * (dt / remaining) * 1.55;
+  const minimumStep = Math.max(0.18, dt * 0.018);
+  roll.value = Math.min(roll.target, roll.value + Math.max(smoothStep, minimumStep) * reelKick);
+
+  if (roll.target - roll.value < 0.28) {
+    roll.value = roll.target;
+  }
+}
+
+function getScorePulse(now, channel) {
+  const eventPulse = now >= scorePulseUntil ? 0 : clamp((scorePulseUntil - now) / 280, 0, 1);
+  return Math.max(eventPulse, getScoreRollPulse(channel, now));
+}
+
+function getScoreRollPulse(channel, now) {
+  const roll = scoreRolls[channel];
+
+  if (!roll || roll.value >= roll.target) {
     return 0;
   }
 
-  return clamp((scorePulseUntil - now) / 280, 0, 1);
+  const rolling = now < roll.rollingUntil ? clamp((roll.rollingUntil - now) / SCORE_ROLL_MAX_MS, 0, 1) : 0.22;
+  return clamp(rolling + Math.abs(sin((now - roll.startedAt) * 0.065)) * 0.18, 0, 1);
+}
+
+function getScoreRollJitter(channel, now) {
+  const pulse = getScoreRollPulse(channel, now);
+
+  if (pulse <= 0) {
+    return { x: 0, y: 0 };
+  }
+
+  return {
+    x: sin(now * 0.09) * pulse * 1.8,
+    y: cos(now * 0.13) * pulse * 1.2,
+  };
 }
 
 function keyPressed() {
@@ -3593,6 +3699,7 @@ function enterGame(gameId) {
   activeMiniGameState = miniGame.createState();
   miniGameArea = null;
   pressedKeys = Object.create(null);
+  resetScoreRoll("mini", activeMiniGameState.score || 0);
   screen = "miniPlaying";
   paused = false;
   currentRun = null;
@@ -3615,6 +3722,7 @@ function startMode(modeId, options) {
     modeId: activeModeId,
     random: dailyChallenge && Progression ? Progression.createSeededRandom(dailyChallenge.seed) : Math.random,
   });
+  resetScoreRoll("snake", game.score || 0);
   startProgressionRun(activeModeId, dailyChallenge, millis());
   screen = "playing";
   paused = false;
@@ -3686,6 +3794,8 @@ function returnToHome() {
   activeDailyChallenge = null;
   settingsExpanded = false;
   moreModesExpanded = false;
+  resetScoreRoll("snake", 0);
+  resetScoreRoll("mini", 0);
   clearFeedback();
   playModeSound();
 }
@@ -3696,6 +3806,7 @@ function resetMiniGame() {
   }
 
   activeMiniGameState = activeMiniGame.createState();
+  resetScoreRoll("mini", activeMiniGameState.score || 0);
   clearFeedback();
   triggerMiniGameStartFeedback();
 }
@@ -3763,6 +3874,7 @@ function resetGame() {
     activeDailyChallenge = null;
   }
 
+  resetScoreRoll("snake", game.score || 0);
   startProgressionRun(activeModeId, activeDailyChallenge, millis());
   screen = "playing";
   paused = false;
