@@ -1,76 +1,76 @@
-# WebSmallGame Project Memory Archive
+# WebSmallGame 项目记忆归档
 
-## Current Snapshot
+## 当前快照
 
-This project is a small static browser game named `WebSmallGame`.
-It is a neon/cyberpunk Snake game built with p5.js and plain JavaScript.
+这是一个名为 `WebSmallGame` 的小型静态网页游戏。
+项目主体是一个霓虹赛博风格的贪吃蛇游戏，使用 p5.js 和原生 JavaScript 编写。
 
-There is no Git repository, no package manager metadata, and no local build step in the current folder.
-The app can be run by opening `index.html` in a browser. It loads p5.js from the jsDelivr CDN.
+当前目录不是通过包管理器驱动的工程，没有构建步骤。
+打开 `index.html` 即可运行游戏；p5.js 会从 jsDelivr CDN 加载。
 
-## Files
+## 文件说明
 
 - `index.html`
-  - Minimal HTML shell.
-  - Sets `lang="zh-CN"`.
-  - Loads `styles.css`, p5.js CDN, `snakeLogic.js`, then `sketch.js`.
+  - 最小 HTML 外壳。
+  - 设置 `lang="zh-CN"`。
+  - 依次加载 `styles.css`、p5.js CDN、`snakeLogic.js` 和 `sketch.js`。
 
 - `styles.css`
-  - Full-window dark neon visual treatment.
-  - Adds radial glow backgrounds, scanlines, subtle grid overlays, fixed full-screen canvas styling, and a centered `noscript` warning.
+  - 提供全屏深色霓虹视觉风格。
+  - 包含径向光晕背景、扫描线、细网格叠层、固定全屏画布样式，以及居中的 `noscript` 提示。
 
 - `snakeLogic.js`
-  - Game-state and rule engine.
-  - Uses a UMD-style wrapper: attaches `SnakeLogic` to `globalThis/window` and also supports `module.exports`.
-  - Owns grid rules, movement, collision, scoring, food placement, mode configuration, walls, portals, and step timing.
+  - 游戏状态与规则引擎。
+  - 使用 UMD 风格包装：会把 `SnakeLogic` 挂到 `globalThis/window`，同时支持 `module.exports`。
+  - 负责网格规则、移动、碰撞、计分、食物生成、模式配置、墙体、传送门和步进速度。
 
 - `sketch.js`
-  - p5.js presentation and interaction layer.
-  - Owns canvas setup, responsive layout, rendering, visual effects, audio effects, vibration, keyboard input, pointer/touch input, pause/reset/mode flow, and feedback intensity.
+  - p5.js 展示层与交互层。
+  - 负责画布初始化、响应式布局、渲染、视觉反馈、音效、震动、键盘输入、鼠标/触控输入、暂停、重开和模式切换。
 
-## Runtime
+## 运行方式
 
-- Entry point: `index.html`
-- Framework/library: p5.js `1.9.4` via CDN
-- Grid size: `24 x 24`
-- Touch controls appear on narrow screens or touch-capable devices.
-- No server is required for the current app.
+- 入口文件：`index.html`
+- 框架/库：p5.js `1.9.4`，通过 CDN 加载
+- 网格尺寸：`24 x 24`
+- 窄屏或触控设备会显示屏幕方向键。
+- 当前版本不需要本地服务器。
 
-## Game Modes
+## 游戏模式
 
-- `Classic`
-  - Standard Snake loop.
-  - Constant movement interval.
+- `经典模式`
+  - 标准贪吃蛇循环。
+  - 移动速度恒定。
 
-- `Neon Rush`
-  - Speed increases every 3 food pickups.
-  - Combo scoring is active when food is collected quickly enough.
-  - Score per food starts at 10 and increases by 5 per combo level after the first.
+- `霓虹疾行`
+  - 每吃 3 个食物速度提升一次。
+  - 快速连续吃到食物时启用连击计分。
+  - 单个食物基础分为 10，连击等级每提升一级额外增加 5 分。
 
-- `Circuit Maze`
-  - Adds fixed electric wall obstacles.
-  - Wall count is currently 22.
-  - Crashing into a wall has special electric feedback.
+- `电路迷宫`
+  - 增加固定电墙障碍。
+  - 当前电墙数量为 22。
+  - 撞到电墙会触发专属电击反馈。
 
-- `Portal Drift`
-  - Adds two linked portals.
-  - Entering one portal exits through the other.
-  - Portals relocate every 5 food pickups.
+- `传送漂移`
+  - 增加一对互通传送门。
+  - 进入一个传送门会从另一个传送门出来。
+  - 每吃 5 个食物，传送门会重新迁移。
 
-## Controls
+## 操作方式
 
-- Mode select: press `1` through `4`, or click/tap a mode card.
-- Movement: arrow keys or `WASD`.
-- Pause/resume: `Space` or `P`.
-- Reset: `R` or `Enter`.
-- Return to mode select: `M`.
-- Toggle sound effects: `V`.
-- Toggle visual feedback mode: `F`.
-- On touch devices: on-screen directional buttons are rendered below the board.
+- 选择模式：按 `1` 到 `4`，或点击/轻触模式卡片。
+- 移动：方向键或 `WASD`。
+- 暂停/继续：`Space` 或 `P`。
+- 重开：`R` 或 `Enter`。
+- 返回模式选择：`M`。
+- 开关音效：`V`。
+- 切换视觉反馈强度：`F`。
+- 触控设备：棋盘下方会显示屏幕方向键。
 
-## State Model
+## 状态模型
 
-The active game object created by `SnakeLogic.createGame()` contains:
+`SnakeLogic.createGame()` 创建的游戏对象包含：
 
 - `cols`, `rows`
 - `modeId`
@@ -89,48 +89,48 @@ The active game object created by `SnakeLogic.createGame()` contains:
 - `lastEvent`
 - `random`
 
-The renderer reacts to `lastEvent` after each tick. Events include:
+渲染层会在每次步进后读取 `lastEvent` 并触发反馈。事件包括：
 
 - `eat`
 - `teleport`
 - `crash`
 
-## Rendering And Feedback
+## 渲染与反馈
 
-The visual identity is high-contrast neon punk:
+整体视觉是高对比度霓虹朋克风：
 
-- Acid green snake
-- Pink food
-- Cyan/pink grid frame
-- Animated backdrop lines
-- Scanline overlay from CSS
-- Shock rings, particles, glitch slices, banners, hit stop, screen shake, and full-screen flashes
+- 酸性绿色蛇身
+- 粉色食物
+- 青色/粉色棋盘边框
+- 动态背景线条
+- CSS 扫描线叠层
+- 冲击环、粒子、故障切片、横幅、命中停顿、屏幕震动和全屏闪光
 
-Audio is generated with the Web Audio API after user interaction unlocks audio.
-The app also uses `navigator.vibrate` where available.
+音效由 Web Audio API 在用户交互后生成。
+可用时还会调用 `navigator.vibrate` 触发震动反馈。
 
-Feedback mode can be:
+反馈模式分为：
 
 - `full`
-  - Full visual effects, hit stop, shake, vibration, and higher audio presence.
+  - 完整视觉反馈、命中停顿、屏幕震动、震动反馈和更明显的音效。
 
 - `reduced`
-  - Fewer particles, no full-screen impact events, reduced shake/hit stop behavior, lower audio gain, and vibration cancellation when switching into this mode.
+  - 减少粒子、不显示全屏冲击事件，降低震动/停顿强度、音量，并在切入该模式时取消震动。
 
-## Important Implementation Notes
+## 重要实现细节
 
-- `snakeLogic.js` is intentionally independent from p5.js and can be tested in Node because it exports with `module.exports`.
-- Direction changes are queued, capped at 4 inputs, and reverse-direction moves are rejected.
-- Collision allows moving into the previous tail cell when the snake is not growing.
-- Food placement avoids the snake, walls, and portals.
-- Maze walls and portals avoid the protected start area.
-- Portal teleport is evaluated before collision and food checks use the teleported destination.
-- The game can reach `status: "won"` if no empty food cell remains.
+- `snakeLogic.js` 不依赖 p5.js，并且支持 Node 环境导出，后续可以单独测试。
+- 方向输入会进入队列，最多保留 4 个输入，并拒绝反向掉头。
+- 蛇没有增长时，允许移动到上一帧尾巴所在格子。
+- 食物生成会避开蛇身、墙体和传送门。
+- 迷宫墙体和传送门都会避开开局保护区域。
+- 传送门移动会先于碰撞和食物检测计算，食物检测使用传送后的目标格。
+- 如果没有空格可以生成食物，游戏会进入 `status: "won"`。
 
-## Useful Future Work
+## 后续可做
 
-- Add a small automated test file for `snakeLogic.js`.
-- Add local vendoring or fallback for p5.js if offline play matters.
-- Add persistent high scores with `localStorage`.
-- Add a visible controls/help overlay for first-time players.
-- Add a deterministic seeded random option for reproducible tests.
+- 为 `snakeLogic.js` 增加一组小型自动化测试。
+- 如果需要离线游玩，可以本地化 p5.js 或增加 CDN 失败回退。
+- 使用 `localStorage` 增加最高分记录。
+- 为新玩家增加可见的操作说明/帮助层。
+- 增加可复现测试用的确定性随机种子。

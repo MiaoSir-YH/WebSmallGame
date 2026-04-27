@@ -22,7 +22,7 @@ body {
     radial-gradient(circle at 82% 18%, rgba(0, 229, 255, 0.16), transparent 30%),
     linear-gradient(135deg, #03040a 0%, #090916 48%, #05060c 100%);
   color: #f2fff5;
-  font-family: "Courier New", Consolas, monospace;
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
 body::before,

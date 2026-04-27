@@ -37,7 +37,7 @@ let audioState = { context: null, unlocked: false };
 function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(Math.min(window.devicePixelRatio || 1, 2));
-  textFont("Courier New, Consolas, monospace");
+  textFont('"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif');
   game = SnakeLogic.createGame({ cols: GRID_COLS, rows: GRID_ROWS, modeId: activeModeId });
   calculateLayout();
 }
@@ -155,7 +155,7 @@ function drawModeSelect(now) {
   fill(PALETTE.acid);
   textStyle(NORMAL);
   textSize(clamp(width * 0.02, 13, 18));
-  text("SELECT A MODE  |  PRESS 1-4", width / 2, clamp(height * 0.055, 18, 44) + 62);
+  text("选择模式  |  按 1-4", width / 2, clamp(height * 0.055, 18, 44) + 62);
   pop();
 
   const compact = width < 760;
@@ -201,7 +201,7 @@ function drawModeSelect(now) {
 
     fill(PALETTE.white);
     textSize(compact ? 20 : 24);
-    text(config.title.toUpperCase(), x + 58, y + 13);
+    text(config.title, x + 58, y + 13);
 
     textStyle(NORMAL);
     fill(PALETTE.acid);
@@ -217,18 +217,18 @@ function drawModeSelect(now) {
 
 function getModeHint(modeId) {
   if (modeId === "rush") {
-    return "combo scoring / rising speed";
+    return "连击计分 / 速度提升";
   }
 
   if (modeId === "maze") {
-    return "avoid fixed electric walls";
+    return "避开固定电墙";
   }
 
   if (modeId === "portal") {
-    return "gate pair relocates every 5 food";
+    return "每 5 个食物迁移传送门";
   }
 
-  return "the original loop";
+  return "原始循环玩法";
 }
 
 function drawHeader(now) {
@@ -253,12 +253,12 @@ function drawHeader(now) {
 
   if (compact) {
     textSize(12);
-    text(`${config.title.toUpperCase()}  |  SCORE ${scoreLabel}`, width / 2, 48);
+    text(`${config.title}  |  分数 ${scoreLabel}`, width / 2, 48);
     text(`${getModeStatus()}  |  ${getFeedbackStatus()}`, width / 2, 66);
   } else {
     textSize(clamp(width * 0.016, 12, 16));
     text(
-      `${config.title.toUpperCase()}  |  SCORE ${scoreLabel}  |  ${getModeStatus()}  |  ${getFeedbackStatus()}  |  M MODE  |  R RESET`,
+      `${config.title}  |  分数 ${scoreLabel}  |  ${getModeStatus()}  |  ${getFeedbackStatus()}  |  M 模式  |  R 重开`,
       width / 2,
       68
     );
@@ -269,23 +269,23 @@ function drawHeader(now) {
 
 function getModeStatus() {
   if (game.modeId === "rush") {
-    return `SPD ${game.speedLevel + 1}  COMBO x${game.combo || 0}`;
+    return `速度 ${game.speedLevel + 1}  连击 x${game.combo || 0}`;
   }
 
   if (game.modeId === "maze") {
-    return `WALLS ${game.walls.length}`;
+    return `电墙 ${game.walls.length}`;
   }
 
   if (game.modeId === "portal") {
     const every = SnakeLogic.getModeConfig("portal").relocateEvery;
-    return `GATE SHIFT ${game.foodsEaten % every}/${every}`;
+    return `传送门迁移 ${game.foodsEaten % every}/${every}`;
   }
 
-  return "CLASSIC LOOP";
+  return "经典循环";
 }
 
 function getFeedbackStatus() {
-  return `${muted ? "SFX OFF" : "SFX ON"}  FX ${feedbackMode.toUpperCase()}`;
+  return `${muted ? "音效关" : "音效开"}  特效${feedbackMode === "full" ? "完整" : "精简"}`;
 }
 
 function drawBoardFrame(now) {
@@ -488,8 +488,8 @@ function triggerEatImpact(event, now) {
   if (overdrive) {
     addImpactEvent({
       type: "banner",
-      label: "OVERDRIVE",
-      sublabel: `COMBO x${combo}`,
+      label: "超载",
+      sublabel: `连击 x${combo}`,
       tint: PALETTE.acid,
       accent: PALETTE.pink,
       duration: 760,
@@ -500,8 +500,8 @@ function triggerEatImpact(event, now) {
   if (event.portalRelocated) {
     addImpactEvent({
       type: "banner",
-      label: "GATES SHIFTED",
-      sublabel: "PORTAL DRIFT",
+      label: "传送门已迁移",
+      sublabel: "传送漂移",
       tint: PALETTE.violet,
       accent: PALETTE.cyan,
       duration: 620,
@@ -539,7 +539,8 @@ function triggerCrashImpact(event, now) {
   const electric = event.reason === "electric";
   const body = event.reason === "body";
   const tint = electric ? PALETTE.cyan : body ? PALETTE.acid : PALETTE.pink;
-  const label = electric ? "SHORT CIRCUIT" : body ? "SELF COLLISION" : "SYSTEM CRASH";
+  const label = electric ? "短路" : body ? "撞到自己" : "系统崩溃";
+  const reasonLabel = electric ? "电墙" : body ? "蛇身" : "边界";
 
   addImpactEvent({
     type: "crash",
@@ -563,7 +564,7 @@ function triggerCrashImpact(event, now) {
   addImpactEvent({
     type: "banner",
     label,
-    sublabel: event.reason.toUpperCase(),
+    sublabel: reasonLabel,
     tint,
     accent: PALETTE.pink,
     duration: 900,
@@ -582,8 +583,8 @@ function triggerModeStartFeedback(modeId, now) {
 
   addImpactEvent({
     type: "banner",
-    label: config.title.toUpperCase(),
-    sublabel: "ONLINE",
+    label: config.title,
+    sublabel: "已上线",
     tint: PALETTE.cyan,
     accent: PALETTE.acid,
     duration: 650,
@@ -1102,8 +1103,8 @@ function drawStateOverlay() {
     return;
   }
 
-  const title = paused ? "PAUSED" : game.status === "won" ? "GRID CLEARED" : "GAME OVER";
-  const detail = paused ? "SPACE OR P TO RESUME  |  M MODE" : "R / ENTER / TAP TO RESTART  |  M MODE";
+  const title = paused ? "已暂停" : game.status === "won" ? "棋盘已清空" : "游戏结束";
+  const detail = paused ? "空格 / P 继续  |  M 模式" : "R / 回车 / 点击 重开  |  M 模式";
 
   push();
   noStroke();
@@ -1384,8 +1385,8 @@ function toggleFeedbackMode() {
   } else {
     addImpactEvent({
       type: "banner",
-      label: "FX FULL",
-      sublabel: "IMPACT SYSTEM ARMED",
+      label: "完整特效",
+      sublabel: "冲击系统已启动",
       tint: PALETTE.acid,
       accent: PALETTE.cyan,
       duration: 560,
