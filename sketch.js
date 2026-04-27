@@ -177,25 +177,104 @@ function drawPunkBackdrop(now) {
   pop();
 }
 
+function drawNeonText(label, x, y, options) {
+  const settings = options || {};
+  const size = settings.size || 42;
+  const alpha = settings.alpha === undefined ? 1 : settings.alpha;
+  const offset = settings.offset || Math.max(1.5, size * 0.045);
+  const glowA = settings.glowA || PALETTE.pink;
+  const glowB = settings.glowB || PALETTE.cyan;
+  const accent = settings.accent || PALETTE.acid;
+  const primary = settings.primary || PALETTE.white;
+
+  push();
+  textAlign(settings.align || CENTER, settings.baseline || CENTER);
+  textStyle(settings.style || BOLD);
+  textSize(size);
+
+  noStroke();
+  drawingContext.shadowBlur = size * 0.65;
+  drawingContext.shadowColor = glowA;
+  fill(colorWithAlpha(glowA, 120 * alpha));
+  text(label, x - offset, y);
+
+  drawingContext.shadowColor = glowB;
+  fill(colorWithAlpha(glowB, 130 * alpha));
+  text(label, x + offset, y + offset * 0.35);
+
+  drawingContext.shadowBlur = size * 0.34;
+  drawingContext.shadowColor = accent;
+  stroke(colorWithAlpha(accent, 230 * alpha));
+  strokeWeight(settings.strokeWeight || Math.max(1.5, size * 0.045));
+  fill(colorWithAlpha(primary, 255 * alpha));
+  text(label, x, y);
+
+  noStroke();
+  drawingContext.shadowBlur = size * 0.2;
+  drawingContext.shadowColor = primary;
+  fill(colorWithAlpha(PALETTE.white, 190 * alpha));
+  text(label, x, y - offset * 0.35);
+  pop();
+}
+
+function drawNeonLogo(label, x, y, size, now, options) {
+  const settings = options || {};
+  const baseline = settings.baseline || TOP;
+  const flicker = 0.88 + sin(now * 0.009) * 0.08 + sin(now * 0.023) * 0.04;
+  const lineWidth = Math.min(settings.maxWidth || width * 0.72, size * label.length * 0.58);
+  const underlineY = baseline === CENTER ? y + size * 0.62 : y + size * 1.06;
+
+  drawNeonText(label, x, y, {
+    size,
+    baseline,
+    alpha: flicker,
+    glowA: PALETTE.pink,
+    glowB: PALETTE.cyan,
+    accent: PALETTE.acid,
+    primary: PALETTE.white,
+    strokeWeight: settings.strokeWeight || Math.max(1.4, size * 0.04),
+    offset: settings.offset || Math.max(1.5, size * 0.04),
+  });
+
+  push();
+  drawingContext.shadowBlur = 18;
+  drawingContext.shadowColor = PALETTE.cyan;
+  stroke(PALETTE.cyan);
+  strokeWeight(Math.max(1, size * 0.035));
+  line(x - lineWidth / 2, underlineY, x + lineWidth / 2, underlineY);
+
+  drawingContext.shadowColor = PALETTE.pink;
+  stroke(PALETTE.pink);
+  strokeWeight(Math.max(1, size * 0.02));
+  line(x - lineWidth * 0.36, underlineY + 5, x + lineWidth * 0.36, underlineY + 5);
+
+  noStroke();
+  fill(colorWithAlpha(PALETTE.acid, 190));
+  rect(x - lineWidth / 2 - 8, underlineY - 2, 5, 5, 1);
+  rect(x + lineWidth / 2 + 3, underlineY - 2, 5, 5, 1);
+  pop();
+}
+
 function drawModeSelect(now) {
   modeCards = [];
   languageButton = null;
   touchControls = [];
+  const titleY = clamp(height * 0.055, 18, 44);
+  const titleSize = clamp(width * 0.056, 30, 58);
+
+  drawNeonLogo("WebSmallGame", width / 2, titleY, titleSize, now, {
+    baseline: TOP,
+    maxWidth: width * 0.76,
+  });
 
   push();
   textAlign(CENTER, TOP);
-  drawingContext.shadowBlur = 24;
-  drawingContext.shadowColor = PALETTE.pink;
-  fill(PALETTE.white);
-  textStyle(BOLD);
-  textSize(clamp(width * 0.056, 30, 58));
-  text("WebSmallGame", width / 2, clamp(height * 0.055, 18, 44));
-
   drawingContext.shadowColor = PALETTE.cyan;
+  drawingContext.shadowBlur = 14;
   fill(PALETTE.acid);
   textStyle(NORMAL);
   textSize(clamp(width * 0.02, 13, 18));
-  text(getCopy().appSubtitle, width / 2, clamp(height * 0.055, 18, 44) + 62);
+  text(getCopy().appSubtitle, width / 2, titleY + titleSize + 16);
   pop();
 
   drawLanguageButton();
@@ -296,16 +375,16 @@ function drawHeader(now) {
   const pulse = getScorePulse(now);
   const copy = getCopy();
   const modeCopy = getModeCopy(game.modeId);
+  const titleSize = clamp(width * 0.038, 24, 36) + pulse * 3;
 
   push();
-  textAlign(CENTER, TOP);
-  drawingContext.shadowBlur = 18 + pulse * 16;
-  drawingContext.shadowColor = pulse > 0 ? PALETTE.acid : PALETTE.pink;
-  fill(pulse > 0 ? PALETTE.acid : PALETTE.white);
-  textSize(clamp(width * 0.052, 26, 52) + pulse * 4);
-  textStyle(BOLD);
-  text("WebSmallGame", width / 2 + 2, compact ? 10 : 18);
+  drawNeonLogo("WebSmallGame", width / 2 + 2, compact ? 8 : 14, titleSize, now, {
+    baseline: TOP,
+    maxWidth: width * 0.48,
+    offset: Math.max(1.2, titleSize * 0.032),
+  });
 
+  textAlign(CENTER, TOP);
   drawingContext.shadowColor = PALETTE.cyan;
   drawingContext.shadowBlur = 10 + pulse * 18;
   fill(pulse > 0 ? PALETTE.amber : PALETTE.acid);
@@ -1187,16 +1266,24 @@ function drawStateOverlay() {
   fill(5, 6, 12, 190);
   rect(board.x, board.y, board.w, board.h);
 
-  textAlign(CENTER, CENTER);
-  drawingContext.shadowBlur = 20;
-  drawingContext.shadowColor = paused ? PALETTE.cyan : PALETTE.pink;
-  textStyle(BOLD);
-  fill(paused ? PALETTE.cyan : PALETTE.pink);
-  textSize(clamp(board.w * 0.12, 30, 58));
-  text(title, board.x + board.w / 2, board.y + board.h / 2 - 44);
+  const titleGlow = paused ? PALETTE.cyan : game.status === "won" ? PALETTE.acid : PALETTE.pink;
+  const titleAccent = paused ? PALETTE.acid : game.status === "won" ? PALETTE.cyan : PALETTE.acid;
+  const titleY = board.y + board.h / 2 - 44;
+
+  drawNeonText(title, board.x + board.w / 2, titleY, {
+    size: clamp(board.w * 0.12, 30, 58),
+    baseline: CENTER,
+    glowA: titleGlow,
+    glowB: PALETTE.cyan,
+    accent: titleAccent,
+    primary: PALETTE.white,
+    strokeWeight: Math.max(1.8, board.cell * 0.1),
+    offset: Math.max(1.5, board.cell * 0.08),
+  });
 
   drawingContext.shadowBlur = 10;
   drawingContext.shadowColor = PALETTE.acid;
+  textAlign(CENTER, CENTER);
   textStyle(NORMAL);
   fill(PALETTE.acid);
   textSize(clamp(board.w * 0.038, 12, 18));
