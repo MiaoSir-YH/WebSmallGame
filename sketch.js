@@ -787,10 +787,6 @@ function drawHeader(now) {
     glowScale: 0.36,
   });
 
-  if (touchLayout) {
-    drawMobileModeButton(copy);
-  }
-
   if (compact) {
     drawReadableText(`${modeCopy.title}  |  ${copy.score} ${scoreLabel}`, width / 2, firstLineY, {
       size: lineSize,
@@ -819,11 +815,12 @@ function drawHeader(now) {
   pop();
 }
 
-function drawMobileModeButton(copy) {
-  const buttonW = 66;
-  const buttonH = 30;
-  const x = 14;
-  const y = 12;
+function drawMobileModeButton(copy, bounds) {
+  const settings = bounds || {};
+  const buttonW = settings.w || 66;
+  const buttonH = settings.h || 30;
+  const x = settings.x === undefined ? 14 : settings.x;
+  const y = settings.y === undefined ? 12 : settings.y;
   const label = getMobileModeButtonLabel(copy);
 
   mobileModeButton = { x, y, w: buttonW, h: buttonH };
@@ -1839,6 +1836,8 @@ function drawPortalPulse(cell, progress, alpha, tint) {
 }
 
 function drawStateOverlay() {
+  mobileModeButton = null;
+
   if (game.status === "running" && !paused) {
     return;
   }
@@ -1850,6 +1849,7 @@ function drawStateOverlay() {
   const scoreLine = paused ? overlay.progressSaved : formatCopy(overlay.finalScore, { score: scoreLabel });
   const actionLine = paused ? overlay.resume : overlay.restart;
   const modeLine = overlay.backToModes;
+  const showMobileModeButton = !paused && shouldUseTouchLayout();
   const titleSize = clamp(board.w * 0.18, 72, 120);
 
   push();
@@ -1892,12 +1892,25 @@ function drawStateOverlay() {
     primary: PALETTE.limeText,
     glow: PALETTE.pink,
   });
-  drawReadableText(modeLine, board.x + board.w / 2, centerY + titleSize * 0.82, {
-    size: clamp(board.w * 0.036, 20, 28),
-    baseline: CENTER,
-    primary: PALETTE.limeText,
-    glow: PALETTE.cyan,
-  });
+
+  if (showMobileModeButton) {
+    const buttonW = clamp(board.w * 0.36, 104, 132);
+    const buttonH = clamp(board.w * 0.095, 32, 38);
+
+    drawMobileModeButton(copy, {
+      x: board.x + board.w / 2 - buttonW / 2,
+      y: centerY + titleSize * 0.66,
+      w: buttonW,
+      h: buttonH,
+    });
+  } else {
+    drawReadableText(modeLine, board.x + board.w / 2, centerY + titleSize * 0.82, {
+      size: clamp(board.w * 0.036, 20, 28),
+      baseline: CENTER,
+      primary: PALETTE.limeText,
+      glow: PALETTE.cyan,
+    });
+  }
   pop();
 }
 
@@ -2108,7 +2121,7 @@ function touchStarted() {
   lastTouchAt = millis();
   const touch = getTouchPoint();
   const startsOnControl = Boolean(findTouchControl(touch.x, touch.y) || findMobileActionButton(touch.x, touch.y));
-  touchStart = shouldTrackSwipe(startsOnControl) ? { x: touch.x, y: touch.y, handled: false } : null;
+  touchStart = shouldTrackSwipe(startsOnControl) ? { x: touch.x, y: touch.y, lastDirection: null } : null;
   return handlePointer(touch.x, touch.y);
 }
 
@@ -2209,7 +2222,7 @@ function shouldTrackSwipe(startsOnControl) {
 }
 
 function tryHandleSwipe(x, y) {
-  if (!touchStart || touchStart.handled || !shouldTrackSwipe(false)) {
+  if (!touchStart || !shouldTrackSwipe(false)) {
     return false;
   }
 
@@ -2236,7 +2249,9 @@ function tryHandleSwipe(x, y) {
   }
 
   SnakeLogic.setDirection(game, direction);
-  touchStart.handled = true;
+  touchStart.x = x;
+  touchStart.y = y;
+  touchStart.lastDirection = direction;
   return true;
 }
 
