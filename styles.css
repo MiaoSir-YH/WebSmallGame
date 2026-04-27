@@ -17,12 +17,17 @@ body {
   height: 100%;
   margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
   background:
     radial-gradient(circle at 18% 12%, rgba(255, 43, 214, 0.18), transparent 28%),
     radial-gradient(circle at 82% 18%, rgba(0, 229, 255, 0.16), transparent 30%),
     linear-gradient(135deg, #03040a 0%, #090916 48%, #05060c 100%);
   color: #f2fff5;
   font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
 }
 
 body::before,
@@ -62,6 +67,7 @@ canvas {
   z-index: 1;
   display: block;
   outline: none;
+  touch-action: none;
 }
 
 noscript {

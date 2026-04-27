@@ -1,6 +1,10 @@
 const GRID_COLS = 24;
 const GRID_ROWS = 24;
 const TOUCH_BREAKPOINT = 760;
+const MOBILE_CONTROL_SHORT_EDGE = 820;
+const MOBILE_CONTROL_LONG_EDGE = 1180;
+const SWIPE_MIN_DISTANCE = 22;
+const SWIPE_DOMINANCE = 1.16;
 
 const PALETTE = {
   ink: "#05060c",
@@ -25,6 +29,7 @@ let activeModeId = "classic";
 let modeCards = [];
 let languageButton = null;
 let touchControls = [];
+let touchStart = null;
 let paused = false;
 let lastStepAt = 0;
 let lastTouchAt = 0;
@@ -105,18 +110,21 @@ function toggleLanguage() {
 }
 
 function calculateLayout() {
-  const compactControls = shouldShowTouchControls();
-  const margin = compactControls ? 16 : 26;
-  const topReserve = compactControls ? 126 : 150;
-  const bottomReserve = compactControls ? 152 : 36;
-  const availableWidth = Math.max(220, width - margin * 2);
+  const mobileControls = shouldShowTouchControls();
+  const landscapeControls = shouldUseSideTouchControls();
+  const margin = mobileControls ? 16 : 26;
+  const topReserve = mobileControls ? (landscapeControls ? 108 : 126) : 150;
+  const bottomReserve = mobileControls ? getTouchBottomReserve() : 36;
+  const sideReserve = landscapeControls ? getTouchSideReserve() : 0;
+  const availableWidth = Math.max(220, width - margin * 2 - sideReserve);
   const availableHeight = Math.max(220, height - topReserve - bottomReserve);
   const cellSize = Math.max(7, Math.floor(Math.min(availableWidth / GRID_COLS, availableHeight / GRID_ROWS)));
   const boardWidth = cellSize * GRID_COLS;
   const boardHeight = cellSize * GRID_ROWS;
+  const playAreaWidth = width - sideReserve;
 
   board = {
-    x: Math.floor((width - boardWidth) / 2),
+    x: Math.floor((playAreaWidth - boardWidth) / 2),
     y: Math.floor(topReserve + Math.max(0, (availableHeight - boardHeight) / 2)),
     w: boardWidth,
     h: boardHeight,
@@ -125,7 +133,37 @@ function calculateLayout() {
 }
 
 function shouldShowTouchControls() {
-  return width <= TOUCH_BREAKPOINT || navigator.maxTouchPoints > 0;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return width <= TOUCH_BREAKPOINT;
+  }
+
+  const shortEdge = Math.min(width, height);
+  const longEdge = Math.max(width, height);
+  const primaryTouch = window.matchMedia("(pointer: coarse)").matches;
+  const noHover = window.matchMedia("(hover: none)").matches;
+  const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent || "";
+  const touchPoints = typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+  const mobileAgent = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent);
+  const compactTouchViewport = shortEdge <= MOBILE_CONTROL_SHORT_EDGE && longEdge <= MOBILE_CONTROL_LONG_EDGE;
+  const roomyMobileViewport = mobileAgent && shortEdge <= 900 && longEdge <= 1400;
+
+  return (primaryTouch && noHover && compactTouchViewport) || (mobileAgent && touchPoints && roomyMobileViewport);
+}
+
+function shouldUseSideTouchControls() {
+  return shouldShowTouchControls() && width > height && height < 560;
+}
+
+function getTouchSideReserve() {
+  return clamp(width * 0.25, 156, 220);
+}
+
+function getTouchBottomReserve() {
+  if (shouldUseSideTouchControls()) {
+    return 24;
+  }
+
+  return clamp(height * 0.26, 188, 232);
 }
 
 function renderScene(now) {
@@ -1321,25 +1359,35 @@ function drawTouchControls() {
     return;
   }
 
-  const size = clamp(Math.min(width, height) * 0.12, 42, 58);
-  const gap = Math.max(8, size * 0.18);
-  const cx = width / 2;
-  const preferredCy = height - size * 1.25;
-  const minCy = board.y + board.h + size * 1.6 + gap;
-  const maxCy = height - size * 0.6;
+  const sideControls = shouldUseSideTouchControls();
+  const size = clamp(Math.min(width, height) * 0.16, 58, 74);
+  const gap = Math.max(12, size * 0.22);
+  const hitSize = clamp(size * 1.54, 88, 112);
+  const sideReserve = sideControls ? getTouchSideReserve() : 0;
+  const cx = sideControls ? width - sideReserve / 2 : width / 2;
+  const preferredCy = sideControls ? height * 0.58 : height - size * 1.1 - 22;
+  const minCy = sideControls ? size + gap + 18 : board.y + board.h + size * 1.45 + gap;
+  const maxCy = height - size * 0.66 - 18;
   const cy = Math.min(Math.max(preferredCy, minCy), maxCy);
 
   touchControls = [
-    { direction: "up", x: cx, y: cy - size - gap, size },
-    { direction: "left", x: cx - size - gap, y: cy, size },
-    { direction: "down", x: cx, y: cy, size },
-    { direction: "right", x: cx + size + gap, y: cy, size },
+    createTouchControl("up", cx, cy - size - gap, size, hitSize),
+    createTouchControl("left", cx - size - gap, cy, size, hitSize),
+    createTouchControl("down", cx, cy, size, hitSize),
+    createTouchControl("right", cx + size + gap, cy, size, hitSize),
   ];
 
   push();
   rectMode(CENTER);
 
   touchControls.forEach((control) => {
+    drawingContext.shadowBlur = 8;
+    drawingContext.shadowColor = PALETTE.cyan;
+    stroke(colorWithAlpha(PALETTE.cyan, 46));
+    strokeWeight(1);
+    fill(0, 229, 255, 14);
+    rect(control.x, control.y, control.hitSize, control.hitSize, 8);
+
     drawingContext.shadowBlur = 18;
     drawingContext.shadowColor = PALETTE.cyan;
     stroke(PALETTE.cyan);
@@ -1350,6 +1398,10 @@ function drawTouchControls() {
   });
 
   pop();
+}
+
+function createTouchControl(direction, x, y, size, hitSize) {
+  return { direction, x, y, size, hitSize };
 }
 
 function drawArrow(direction, x, y, size) {
@@ -1487,8 +1539,23 @@ function mousePressed() {
 
 function touchStarted() {
   lastTouchAt = millis();
-  const touch = touches[0] || { x: mouseX, y: mouseY };
+  const touch = getTouchPoint();
+  const startsOnControl = Boolean(findTouchControl(touch.x, touch.y));
+  touchStart = shouldTrackSwipe(startsOnControl) ? { x: touch.x, y: touch.y, handled: false } : null;
   return handlePointer(touch.x, touch.y);
+}
+
+function touchMoved(event) {
+  const touch = getTouchPoint(event);
+  tryHandleSwipe(touch.x, touch.y);
+  return false;
+}
+
+function touchEnded(event) {
+  const touch = getTouchPoint(event);
+  tryHandleSwipe(touch.x, touch.y);
+  touchStart = null;
+  return false;
 }
 
 function handlePointer(x, y) {
@@ -1514,13 +1581,83 @@ function handlePointer(x, y) {
     return false;
   }
 
-  const control = touchControls.find((button) => pointInControl(x, y, button));
+  const control = findTouchControl(x, y);
 
   if (control) {
     SnakeLogic.setDirection(game, control.direction);
   }
 
   return false;
+}
+
+function getTouchPoint(event) {
+  const changedTouch = event && event.changedTouches && event.changedTouches[0];
+  const activeTouch = event && event.touches && event.touches[0];
+  const p5Touch = typeof touches !== "undefined" && touches.length > 0 ? touches[0] : null;
+  const source = changedTouch || activeTouch || p5Touch;
+
+  if (source) {
+    return {
+      x: source.clientX === undefined ? source.x : source.clientX,
+      y: source.clientY === undefined ? source.y : source.clientY,
+    };
+  }
+
+  return { x: mouseX, y: mouseY };
+}
+
+function shouldTrackSwipe(startsOnControl) {
+  return (
+    shouldShowTouchControls() &&
+    screen === "playing" &&
+    game.status === "running" &&
+    !paused &&
+    !startsOnControl
+  );
+}
+
+function tryHandleSwipe(x, y) {
+  if (!touchStart || touchStart.handled || !shouldTrackSwipe(false)) {
+    return false;
+  }
+
+  const dx = x - touchStart.x;
+  const dy = y - touchStart.y;
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+  const distance = Math.max(absX, absY);
+
+  if (distance < SWIPE_MIN_DISTANCE) {
+    return false;
+  }
+
+  let direction = null;
+
+  if (absX > absY * SWIPE_DOMINANCE) {
+    direction = dx > 0 ? "right" : "left";
+  } else if (absY > absX * SWIPE_DOMINANCE) {
+    direction = dy > 0 ? "down" : "up";
+  }
+
+  if (!direction) {
+    return false;
+  }
+
+  SnakeLogic.setDirection(game, direction);
+  touchStart.handled = true;
+  return true;
+}
+
+function findTouchControl(x, y) {
+  const candidates = touchControls.filter((button) => pointInControl(x, y, button));
+
+  if (candidates.length <= 1) {
+    return candidates[0] || null;
+  }
+
+  return candidates.reduce((nearest, candidate) => (
+    getDistanceSquared(x, y, candidate) < getDistanceSquared(x, y, nearest) ? candidate : nearest
+  ));
 }
 
 function pointInRect(x, y, rectBounds) {
@@ -1533,8 +1670,14 @@ function pointInRect(x, y, rectBounds) {
 }
 
 function pointInControl(x, y, control) {
-  const half = control.size / 2;
+  const half = (control.hitSize || control.size) / 2;
   return x >= control.x - half && x <= control.x + half && y >= control.y - half && y <= control.y + half;
+}
+
+function getDistanceSquared(x, y, control) {
+  const dx = x - control.x;
+  const dy = y - control.y;
+  return dx * dx + dy * dy;
 }
 
 function startMode(modeId) {
