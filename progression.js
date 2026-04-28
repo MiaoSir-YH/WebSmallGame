@@ -9,7 +9,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : window, function buildProgression(root) {
   const STORAGE_KEY = "web-small-game.progression.v1";
   const VERSION = 1;
-  const MODE_SEQUENCE = ["classic", "rush", "maze", "portal"];
+  const MODE_SEQUENCE = ["classic", "rush", "maze", "portal", "chain", "hunter", "collapse", "twin"];
   const CONTRACT_REWARD = 1;
   const ACHIEVEMENT_REWARD = 3;
   const DAILY_REWARD = 5;
@@ -45,6 +45,34 @@
       reward: CONTRACT_REWARD,
       modeId: "portal",
     },
+    chain_score_120: {
+      id: "chain_score_120",
+      metric: "score",
+      target: 120,
+      reward: CONTRACT_REWARD,
+      modeId: "chain",
+    },
+    hunter_score_100: {
+      id: "hunter_score_100",
+      metric: "score",
+      target: 100,
+      reward: CONTRACT_REWARD,
+      modeId: "hunter",
+    },
+    collapse_score_100: {
+      id: "collapse_score_100",
+      metric: "score",
+      target: 100,
+      reward: CONTRACT_REWARD,
+      modeId: "collapse",
+    },
+    twin_score_80: {
+      id: "twin_score_80",
+      metric: "score",
+      target: 80,
+      reward: CONTRACT_REWARD,
+      modeId: "twin",
+    },
   };
 
   const CONTRACTS_BY_MODE = {
@@ -52,6 +80,10 @@
     rush: ["score_100", "food_12", "rush_combo_5_contract"],
     maze: ["score_100", "food_12", "maze_score_90"],
     portal: ["score_100", "food_12", "portal_teleport_4"],
+    chain: ["score_100", "food_12", "chain_score_120"],
+    hunter: ["score_100", "food_12", "hunter_score_100"],
+    collapse: ["score_100", "food_12", "collapse_score_100"],
+    twin: ["score_100", "food_12", "twin_score_80"],
   };
 
   const ACHIEVEMENT_DEFS = [
@@ -62,6 +94,10 @@
     { id: "rush_combo_9", metric: "combo", target: 9, modeId: "rush" },
     { id: "maze_score_100", metric: "score", target: 100, modeId: "maze" },
     { id: "portal_teleport_5", metric: "teleports", target: 5, modeId: "portal" },
+    { id: "chain_score_150", metric: "score", target: 150, modeId: "chain" },
+    { id: "hunter_score_140", metric: "score", target: 140, modeId: "hunter" },
+    { id: "collapse_score_140", metric: "score", target: 140, modeId: "collapse" },
+    { id: "twin_score_120", metric: "score", target: 120, modeId: "twin" },
     { id: "all_modes", special: "all_modes" },
     { id: "no_pause_120", special: "no_pause_score", target: 120 },
     { id: "first_daily_clear", special: "first_daily_clear" },
@@ -503,6 +539,22 @@
 
     if (modeId === "portal") {
       return { metric: "teleports", target: 5 };
+    }
+
+    if (modeId === "chain") {
+      return { metric: "score", target: 160 };
+    }
+
+    if (modeId === "hunter") {
+      return { metric: "score", target: 130 };
+    }
+
+    if (modeId === "collapse") {
+      return { metric: "score", target: 130 };
+    }
+
+    if (modeId === "twin") {
+      return { metric: "score", target: 100 };
     }
 
     return { metric: "score", target: 140 };

@@ -20,6 +20,7 @@ const PALETTE = {
   limeText: "#dfff69",
   amber: "#ffe066",
   violet: "#8f4dff",
+  red: "#ff315a",
 };
 
 const I18N = globalThis.WebSmallGameI18N;
@@ -319,9 +320,13 @@ function renderScene(now) {
   drawHeader(now);
   drawBoardFrame(now);
   drawGrid();
+  drawSafeBounds(now);
   drawWalls(now);
   drawPortals(now);
+  drawBonusFoods(now);
   drawFood(now);
+  drawHunter(now);
+  drawTwinSnake();
   drawSnake();
   drawEatFeedback(now);
   drawTeleportFeedback(now);
@@ -826,8 +831,13 @@ function drawModeSelect(now) {
   refreshProgressionSummary();
   ensureDailyChallenge();
   const compact = width < 760 || shouldUseTouchLayout();
-  const titleY = compact ? 12 : clamp(height * 0.034, 14, 30);
-  const titleSize = compact ? clamp(width * 0.09, 32, 42) : clamp(width * 0.052, 58, 92);
+  const tightModeSelect = compact && moreModesExpanded;
+  const titleY = tightModeSelect ? 8 : compact ? 12 : clamp(height * 0.034, 14, 30);
+  const titleSize = tightModeSelect
+    ? clamp(width * 0.078, 28, 38)
+    : compact
+      ? clamp(width * 0.09, 32, 42)
+      : clamp(width * 0.052, 58, 92);
   const copy = getCopy();
   const snakeCopy = getGameCopy("snake");
 
@@ -847,18 +857,22 @@ function drawModeSelect(now) {
   drawHomeBackButton(copy, compact);
 
   const columns = compact ? 1 : 2;
-  const gap = compact ? 12 : 18;
-  const margin = compact ? 20 : 34;
+  const gap = tightModeSelect ? 8 : compact ? 12 : 18;
+  const margin = tightModeSelect ? 16 : compact ? 20 : 34;
   const totalW = Math.min(compact ? 440 : 820, width - margin * 2);
   const cardW = compact ? totalW : (totalW - gap) / columns;
-  const cardH = compact ? 82 : 104;
+  const cardH = tightModeSelect ? 64 : compact ? 82 : 104;
+  const extraColumns = compact && totalW >= 320 ? 2 : columns;
+  const extraGap = tightModeSelect ? 8 : compact ? 10 : gap;
+  const extraCardW = compact && extraColumns > 1 ? (totalW - extraGap) / extraColumns : cardW;
+  const extraCardH = tightModeSelect ? 56 : compact ? 72 : cardH;
   const startX = (width - totalW) / 2;
-  const drawerH = compact ? 48 : 56;
-  const archiveH = compact ? 62 : 74;
-  const settingsRowH = compact ? 44 : 50;
+  const drawerH = tightModeSelect ? 40 : compact ? 48 : 56;
+  const archiveH = tightModeSelect ? 50 : compact ? 62 : 74;
+  const settingsRowH = tightModeSelect ? 38 : compact ? 44 : 50;
   const extraModes = SnakeLogic.MODE_SEQUENCE.filter((modeId) => modeId !== "classic");
-  const extraRows = Math.ceil(extraModes.length / columns);
-  const extraModesHeight = moreModesExpanded ? extraRows * cardH + Math.max(0, extraRows - 1) * gap + gap : 0;
+  const extraRows = Math.ceil(extraModes.length / extraColumns);
+  const extraModesHeight = moreModesExpanded ? extraRows * extraCardH + Math.max(0, extraRows - 1) * extraGap + gap : 0;
   const plannedListHeight =
     (compact ? cardH * 2 + gap : cardH) +
     gap +
@@ -869,7 +883,7 @@ function drawModeSelect(now) {
     gap +
     drawerH +
     (settingsExpanded ? gap + settingsRowH : 0);
-  const minStartY = titleY + titleSize + (compact ? 58 : 76);
+  const minStartY = titleY + titleSize + (compact ? (tightModeSelect ? 46 : 58) : 76);
   const preferredStartY = Math.max(minStartY, Math.min(height * (compact ? 0.2 : 0.28), height - 300));
   const fitStartY = height - plannedListHeight - (compact ? 16 : 24);
   let cursorY = compact ? Math.max(minStartY, Math.min(preferredStartY, fitStartY)) : preferredStartY;
@@ -892,11 +906,19 @@ function drawModeSelect(now) {
 
   if (moreModesExpanded) {
     extraModes.forEach((modeId, index) => {
-      const col = compact ? 0 : index % columns;
-      const row = compact ? index : Math.floor(index / columns);
-      drawModeCard(modeId, startX + col * (cardW + gap), cursorY + row * (cardH + gap), cardW, cardH, compact, now);
+      const col = index % extraColumns;
+      const row = Math.floor(index / extraColumns);
+      drawModeCard(
+        modeId,
+        startX + col * (extraCardW + extraGap),
+        cursorY + row * (extraCardH + extraGap),
+        extraCardW,
+        extraCardH,
+        compact,
+        now
+      );
     });
-    cursorY += extraRows * cardH + Math.max(0, extraRows - 1) * gap + gap;
+    cursorY += extraRows * extraCardH + Math.max(0, extraRows - 1) * extraGap + gap;
   }
 
   progressionArchiveButton = { x: startX, y: cursorY, w: totalW, h: archiveH };
@@ -922,6 +944,13 @@ function drawModeCard(modeId, x, y, cardW, cardH, compact, now) {
   const modeCopy = getModeCopy(modeId);
   const selected = modeId === activeModeId;
   const pulse = selected ? 0.45 + sin(now * 0.008) * 0.2 : 0;
+  const dense = cardH < 88 || cardW < 260;
+  const tiny = dense && cardW < 175;
+  const titleX = x + (dense ? 42 : 58);
+  const titleW = cardW - (dense ? 50 : 72);
+  const hintText = getModeHint(modeId);
+  const hintX = x + (dense ? 12 : 18);
+  const hintW = cardW - (dense ? 24 : 36);
 
   modeCards.push({ modeId, x, y, w: cardW, h: cardH });
 
@@ -940,21 +969,23 @@ function drawModeCard(modeId, x, y, cardW, cardH, compact, now) {
   textAlign(LEFT, TOP);
   textStyle(BOLD);
   fill(PALETTE.pink);
-  textSize(13);
-  text(`0${config.number}`, x + 18, y + 14);
+  textSize(tiny ? 10 : dense ? 11 : 13);
+  text(`0${config.number}`, x + (dense ? 12 : 18), y + (dense ? 10 : 14));
 
   fill(PALETTE.white);
-  textSize(compact ? 21 : 26);
-  text(modeCopy.title, x + 58, y + 11);
+  textSize(dense ? getFittedTextSize(modeCopy.title, titleW, tiny ? 13 : 16, 10) : compact ? 21 : 26);
+  text(modeCopy.title, titleX, y + (dense ? 9 : 11), titleW, dense ? 20 : 28);
 
   textStyle(NORMAL);
   fill(PALETTE.acid);
-  textSize(compact ? 12 : 15);
-  text(modeCopy.tagline, x + 18, y + (compact ? 45 : 54), cardW - 36, 34);
+  textSize(dense ? 10 : compact ? 12 : 15);
+  if (!dense) {
+    text(modeCopy.tagline, x + 18, y + (compact ? 45 : 54), cardW - 36, 34);
+  }
 
   fill(PALETTE.cyan);
-  textSize(compact ? 11 : 12);
-  text(getModeHint(modeId), x + 18, y + cardH - 24, cardW - 36, 18);
+  textSize(dense ? getFittedTextSize(hintText, hintW, tiny ? 9 : 10, 7) : compact ? 11 : 12);
+  text(hintText, hintX, y + cardH - (dense ? 26 : 24), hintW, dense ? 22 : 18);
   pop();
 }
 
@@ -1942,6 +1973,33 @@ function getModeStatus() {
     });
   }
 
+  if (game.modeId === "chain") {
+    return formatCopy(copy.status.chain, {
+      count: game.bonusFoods ? game.bonusFoods.length : 0,
+      combo: game.combo || 0,
+    });
+  }
+
+  if (game.modeId === "hunter") {
+    const head = game.snake[0];
+    const hunter = game.hunter || head;
+    return formatCopy(copy.status.hunter, {
+      distance: Math.abs(head.x - hunter.x) + Math.abs(head.y - hunter.y),
+    });
+  }
+
+  if (game.modeId === "collapse") {
+    const bounds = game.safeBounds || { inset: 0, maxInset: 0 };
+    return formatCopy(copy.status.collapse, {
+      inset: bounds.inset || 0,
+      max: bounds.maxInset || 0,
+    });
+  }
+
+  if (game.modeId === "twin") {
+    return formatCopy(copy.status.twin, { length: game.snake.length });
+  }
+
   return copy.status.classic;
 }
 
@@ -1992,6 +2050,58 @@ function drawGrid() {
   for (let y = 0; y <= GRID_ROWS; y += 1) {
     const py = board.y + y * board.cell;
     line(board.x, py, board.x + board.w, py);
+  }
+
+  pop();
+}
+
+function drawSafeBounds(now) {
+  if (!game.safeBounds) {
+    return;
+  }
+
+  const inset = game.safeBounds.inset || 0;
+  const maxInset = game.safeBounds.maxInset || 0;
+  const pulse = 0.55 + sin(now * 0.012) * 0.28;
+
+  push();
+  noStroke();
+
+  if (inset > 0) {
+    const safeX = board.x + inset * board.cell;
+    const safeY = board.y + inset * board.cell;
+    const safeW = board.w - inset * board.cell * 2;
+    const safeH = board.h - inset * board.cell * 2;
+
+    fill(255, 49, 90, 44);
+    rect(board.x, board.y, board.w, inset * board.cell);
+    rect(board.x, safeY + safeH, board.w, inset * board.cell);
+    rect(board.x, safeY, inset * board.cell, safeH);
+    rect(safeX + safeW, safeY, inset * board.cell, safeH);
+
+    drawingContext.shadowBlur = 22;
+    drawingContext.shadowColor = PALETTE.red;
+    noFill();
+    stroke(colorWithAlpha(PALETTE.red, 170 + pulse * 70));
+    strokeWeight(2.5);
+    rect(safeX, safeY, safeW, safeH, 3);
+  } else {
+    drawingContext.shadowBlur = 12;
+    drawingContext.shadowColor = PALETTE.cyan;
+    noFill();
+    stroke(colorWithAlpha(PALETTE.cyan, 80 + pulse * 35));
+    strokeWeight(1.5);
+    rect(board.x, board.y, board.w, board.h, 3);
+  }
+
+  if (maxInset > 0) {
+    stroke(colorWithAlpha(PALETTE.amber, 60));
+    strokeWeight(1);
+
+    for (let layer = 1; layer <= maxInset; layer += 1) {
+      const offset = layer * board.cell;
+      rect(board.x + offset, board.y + offset, board.w - offset * 2, board.h - offset * 2);
+    }
   }
 
   pop();
@@ -2058,6 +2168,102 @@ function drawPortals(now) {
   pop();
 }
 
+function drawBonusFoods(now) {
+  if (!game.bonusFoods || game.bonusFoods.length === 0) {
+    return;
+  }
+
+  const lifetime = SnakeLogic.getModeConfig("chain").bonusLifetime || 8;
+
+  push();
+  rectMode(CENTER);
+
+  game.bonusFoods.forEach((bonus, index) => {
+    const remaining = clamp((bonus.expiresAt - game.tick) / lifetime, 0, 1);
+    const cx = board.x + bonus.x * board.cell + board.cell / 2;
+    const cy = board.y + bonus.y * board.cell + board.cell / 2;
+    const size = board.cell * (0.42 + sin(now * 0.014 + index) * 0.06);
+    const ring = board.cell * (0.88 + (1 - remaining) * 0.38);
+
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = PALETTE.amber;
+    noFill();
+    stroke(colorWithAlpha(PALETTE.amber, 90 + remaining * 150));
+    strokeWeight(2);
+    circle(cx, cy, ring);
+
+    translate(cx, cy);
+    rotate(now * 0.006 + index);
+    stroke(PALETTE.white);
+    strokeWeight(1.4);
+    fill(colorWithAlpha(PALETTE.amber, 150 + remaining * 105));
+    rect(0, 0, size, size, 2);
+    stroke(PALETTE.pink);
+    line(-size * 0.62, 0, size * 0.62, 0);
+    line(0, -size * 0.62, 0, size * 0.62);
+    rotate(-(now * 0.006 + index));
+    translate(-cx, -cy);
+  });
+
+  pop();
+}
+
+function drawHunter(now) {
+  if (!game.hunter) {
+    return;
+  }
+
+  const cx = board.x + game.hunter.x * board.cell + board.cell / 2;
+  const cy = board.y + game.hunter.y * board.cell + board.cell / 2;
+  const pulse = 0.5 + sin(now * 0.018) * 0.28;
+  const size = board.cell * (0.64 + pulse * 0.14);
+
+  push();
+  rectMode(CENTER);
+  translate(cx, cy);
+  rotate(PI / 4 + now * 0.004);
+  drawingContext.shadowBlur = 26;
+  drawingContext.shadowColor = PALETTE.red;
+  stroke(PALETTE.white);
+  strokeWeight(1.7);
+  fill(PALETTE.red);
+  rect(0, 0, size, size, 3);
+  stroke(PALETTE.amber);
+  line(-size * 0.5, 0, size * 0.5, 0);
+  line(0, -size * 0.5, 0, size * 0.5);
+  rotate(-PI / 4 - now * 0.004);
+  noFill();
+  stroke(colorWithAlpha(PALETTE.red, 130 + pulse * 100));
+  strokeWeight(1.8);
+  circle(0, 0, board.cell * (1.2 + pulse * 0.5));
+  pop();
+}
+
+function drawTwinSnake() {
+  if (!game.twinSnake || game.twinSnake.length === 0) {
+    return;
+  }
+
+  push();
+
+  game.twinSnake.forEach((segment, index) => {
+    const x = board.x + segment.x * board.cell;
+    const y = board.y + segment.y * board.cell;
+    const inset = Math.max(1, Math.floor(board.cell * 0.14));
+    const size = board.cell - inset * 2;
+    const isHead = index === 0;
+
+    drawingContext.shadowBlur = isHead ? 22 : 12;
+    drawingContext.shadowColor = isHead ? PALETTE.cyan : PALETTE.violet;
+    stroke(isHead ? PALETTE.white : PALETTE.cyan);
+    strokeWeight(isHead ? 2 : 1);
+    fill(isHead ? PALETTE.cyan : color(143, 77, 255, map(index, 0, game.twinSnake.length - 1, 220, 128)));
+    rect(x + inset, y + inset, size, size, Math.min(5, board.cell * 0.18));
+  });
+
+  pop();
+}
+
 function drawSnake() {
   push();
 
@@ -2109,6 +2315,11 @@ function handleGameEvent(event, now) {
   if (event.type === "eat") {
     triggerEatFeedback(event.cell, event.points, event.combo, now);
     triggerEatImpact(event, now);
+  }
+
+  if (event.type === "bonus") {
+    triggerEatFeedback(event.cell, event.points, event.combo, now);
+    triggerBonusImpact(event, now);
   }
 
   if (event.type === "teleport") {
@@ -2274,6 +2485,42 @@ function triggerEatImpact(event, now) {
     });
   }
 
+  if (event.bonusSpawned) {
+    addImpactEvent({
+      type: "banner",
+      label: copy.impact.bonusLit,
+      sublabel: formatCopy(copy.impact.combo, { combo: Math.max(1, combo) }),
+      tint: PALETTE.amber,
+      accent: PALETTE.pink,
+      duration: 560,
+      fullScreen: true,
+    });
+  }
+
+  if (event.hunterPulse) {
+    addImpactEvent({
+      type: "shock",
+      cell: event.cell,
+      tint: PALETTE.red,
+      accent: PALETTE.amber,
+      intensity: 1.7,
+      duration: 560,
+      particles: buildParticleBurst(event.cell, 24, [PALETTE.red, PALETTE.amber, PALETTE.pink], 1.7),
+    });
+  }
+
+  if (event.safeInsetChanged) {
+    addImpactEvent({
+      type: "banner",
+      label: copy.impact.gridCollapse,
+      sublabel: getModeStatus(),
+      tint: PALETTE.red,
+      accent: PALETTE.cyan,
+      duration: 680,
+      fullScreen: true,
+    });
+  }
+
   addShake(overdrive ? 13 : combo >= 2 ? 8 : 4, overdrive ? 280 : 160);
   addHitStop(overdrive ? 88 : combo >= 2 ? 55 : 32);
   playEatSound(combo);
@@ -2281,6 +2528,39 @@ function triggerEatImpact(event, now) {
     playOverdriveSound();
   }
   vibrate(overdrive ? [18, 28, 36] : combo >= 2 ? [14, 18, 14] : 14);
+}
+
+function triggerBonusImpact(event, now) {
+  const copy = getCopy();
+  const combo = event.combo || 1;
+  const intensity = combo >= 3 ? 1.9 : 1.35;
+
+  addImpactEvent({
+    type: "shock",
+    cell: event.cell,
+    tint: PALETTE.amber,
+    accent: PALETTE.pink,
+    intensity,
+    duration: combo >= 3 ? 600 : 460,
+    particles: buildParticleBurst(event.cell, combo >= 3 ? 26 : 18, [PALETTE.amber, PALETTE.pink, PALETTE.cyan], intensity),
+  });
+
+  if (combo >= 2) {
+    addImpactEvent({
+      type: "banner",
+      label: copy.impact.bonusTaken,
+      sublabel: formatCopy(copy.impact.combo, { combo }),
+      tint: PALETTE.amber,
+      accent: PALETTE.acid,
+      duration: 560,
+      fullScreen: true,
+    });
+  }
+
+  addShake(combo >= 3 ? 10 : 6, combo >= 3 ? 220 : 150);
+  addHitStop(combo >= 3 ? 70 : 40);
+  playEatSound(combo + 1);
+  vibrate(combo >= 3 ? [12, 16, 22] : 12);
 }
 
 function triggerTeleportImpact(event, now) {
@@ -2302,28 +2582,31 @@ function triggerTeleportImpact(event, now) {
 
 function triggerCrashImpact(event, now) {
   const copy = getCopy();
-  const electric = event.reason === "electric";
+  const electric = event.reason === "electric" || event.reason === "collapse";
+  const hunter = event.reason === "hunter";
+  const twin = event.reason === "twin";
   const body = event.reason === "body";
-  const tint = electric ? PALETTE.cyan : body ? PALETTE.acid : PALETTE.pink;
+  const tint = hunter ? PALETTE.red : twin ? PALETTE.cyan : electric ? PALETTE.cyan : body ? PALETTE.acid : PALETTE.pink;
   const crashCopy = copy.crash[event.reason] || copy.crash.wall;
+  const intensity = electric || hunter || twin ? 2.4 : 1.85;
 
   addImpactEvent({
     type: "crash",
     cell: event.cell,
     reason: event.reason,
     tint,
-    accent: electric ? PALETTE.white : PALETTE.pink,
-    intensity: electric ? 2.4 : 1.85,
-    duration: electric ? 860 : 720,
-    particles: buildParticleBurst(event.cell, electric ? 42 : 30, [tint, PALETTE.pink, PALETTE.white], electric ? 2.4 : 1.85),
+    accent: twin ? PALETTE.violet : electric ? PALETTE.white : PALETTE.pink,
+    intensity,
+    duration: electric || hunter || twin ? 860 : 720,
+    particles: buildParticleBurst(event.cell, electric || hunter || twin ? 42 : 30, [tint, PALETTE.pink, PALETTE.white], intensity),
   });
 
   addImpactEvent({
     type: "glitch",
-    intensity: electric ? 2.5 : 1.8,
-    duration: electric ? 620 : 420,
+    intensity: electric || hunter || twin ? 2.5 : 1.8,
+    duration: electric || hunter || twin ? 620 : 420,
     fullScreen: true,
-    slices: buildGlitchSlices(electric ? 16 : 11),
+    slices: buildGlitchSlices(electric || hunter || twin ? 16 : 11),
   });
 
   addImpactEvent({
@@ -2336,11 +2619,11 @@ function triggerCrashImpact(event, now) {
     fullScreen: true,
   });
 
-  addShake(electric ? 18 : 14, electric ? 460 : 380);
-  addHitStop(electric ? 150 : 120);
-  gameOverFlashUntil = Math.max(gameOverFlashUntil, now + (electric ? 360 : 300));
-  playCrashSound(electric);
-  vibrate(electric ? [32, 28, 46, 26, 60] : [28, 36, 46]);
+  addShake(electric || hunter || twin ? 18 : 14, electric || hunter || twin ? 460 : 380);
+  addHitStop(electric || hunter || twin ? 150 : 120);
+  gameOverFlashUntil = Math.max(gameOverFlashUntil, now + (electric || hunter || twin ? 360 : 300));
+  playCrashSound(electric || hunter);
+  vibrate(electric || hunter || twin ? [32, 28, 46, 26, 60] : [28, 36, 46]);
 }
 
 function triggerModeStartFeedback(modeId, now) {
